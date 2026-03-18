@@ -1,1 +1,2 @@
-# STARThack2026
+# CHAIN IQ (STARThack 2026)
+
