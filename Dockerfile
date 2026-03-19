@@ -1,7 +1,7 @@
 # ---- Stage 1: Build frontend ----
 FROM node:22-slim AS frontend-build
 WORKDIR /app/frontend
-COPY frontend/package.json frontend/package-lock.json* ./
+COPY frontend/package.json ./
 RUN npm install
 COPY frontend/ ./
 RUN NODE_OPTIONS=--max-old-space-size=2048 npm run build
