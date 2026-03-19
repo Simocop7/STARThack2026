@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChainIQ – Procurement Intake Portal</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242836;
+    --border: #2e3348;
+    --accent: #6366f1;
+    --accent-hover: #818cf8;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --success: #34d399;
+    --warn: #fbbf24;
+    --error: #f87171;
+    --radius: 10px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  header {
+    width: 100%;
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  header .logo {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  header .logo span { color: var(--accent); }
+
+  header .subtitle {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin-left: auto;
+  }
+
+  main {
+    width: 100%;
+    max-width: 780px;
+    padding: 36px 24px 60px;
+  }
+
+  h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .page-desc {
+    color: var(--text-dim);
+    font-size: 14px;
+    margin-bottom: 28px;
+  }
+
+  /* ── Form sections ─────────────────────────── */
+  .section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--accent);
+    margin-bottom: 18px;
+  }
+
+  .row { display: flex; gap: 16px; margin-bottom: 16px; }
+  .row:last-child { margin-bottom: 0; }
+  .col { flex: 1; display: flex; flex-direction: column; }
+
+  label {
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 5px;
+    color: var(--text-dim);
+  }
+
+  label .req { color: var(--error); margin-left: 2px; }
+  label .opt { color: var(--text-dim); font-weight: 400; font-style: italic; }
+
+  input, select, textarea {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 14px;
+    color: var(--text);
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+  }
+
+  select { cursor: pointer; }
+
+  textarea { resize: vertical; min-height: 110px; line-height: 1.55; }
+
+  input::placeholder, textarea::placeholder { color: #475569; }
+
+  /* disabled state for category_l2 before l1 selected */
+  select:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  /* ── Buttons ───────────────────────────────── */
+  .actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 8px;
+  }
+
+  button {
+    padding: 10px 22px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: background 0.15s, transform 0.1s;
+    font-family: inherit;
+  }
+
+  button:active { transform: scale(0.97); }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { background: var(--border); color: var(--text); }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+
+  /* ── Output panel ──────────────────────────── */
+  .output-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-top: 24px;
+    display: none;
+  }
+
+  .output-panel.visible { display: block; }
+
+  .output-panel .section-title { color: var(--success); }
+
+  pre {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+    font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  }
+
+  /* ── Validation ────────────────────────────── */
+  .field-error { border-color: var(--error) !important; }
+
+  .error-msg {
+    color: var(--error);
+    font-size: 12px;
+    margin-top: 3px;
+    display: none;
+  }
+
+  .error-msg.visible { display: block; }
+
+  /* ── Unit hint ─────────────────────────────── */
+  .unit-hint {
+    color: var(--text-dim);
+    font-size: 12px;
+    margin-top: 3px;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Chain<span>IQ</span></div>
+  <div class="subtitle">Procurement Intake Portal</div>
+</header>
+
+<main>
+  <h2>New Purchase Request</h2>
+  <p class="page-desc">Fill in the details below. All fields marked with * are required.</p>
+
+  <form id="intakeForm" novalidate>
+
+    <!-- ── Category ──────────────────────────── -->
+    <div class="section">
+      <div class="section-title">Category</div>
+      <div class="row">
+        <div class="col">
+          <label for="business_unit">Business Unit <span class="req">*</span></label>
+          <select id="business_unit" required>
+            <option value="">Select...</option>
+            <option>Digital Workplace</option>
+            <option>Regional IT EU</option>
+            <option>Regional IT APAC</option>
+            <option>Marketing EMEA</option>
+            <option>Facilities DACH</option>
+            <option>Central Procurement</option>
+          </select>
+          <span class="error-msg">Required</span>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col">
+          <label for="category_l1">Category L1 <span class="req">*</span></label>
+          <select id="category_l1" required>
+            <option value="">Select...</option>
+            <option>IT</option>
+            <option>Facilities</option>
+            <option>Professional Services</option>
+            <option>Marketing</option>
+          </select>
+          <span class="error-msg">Required</span>
+        </div>
+        <div class="col">
+          <label for="category_l2">Category L2 <span class="req">*</span></label>
+          <select id="category_l2" required disabled>
+            <option value="">Select L1 first...</option>
+          </select>
+          <span class="error-msg">Required</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Quantity & Delivery ────────────────── -->
+    <div class="section">
+      <div class="section-title">Quantity &amp; Delivery</div>
+      <div class="row">
+        <div class="col">
+          <label for="quantity">Quantity</label>
+          <input type="number" id="quantity" min="0" step="1" placeholder="e.g. 240">
+          <span class="unit-hint" id="unitHint"></span>
+        </div>
+        <div class="col">
+          <label for="unit_of_measure">Unit of Measure <span class="req">*</span></label>
+          <select id="unit_of_measure" required>
+            <option value="">Select...</option>
+            <option value="device">device</option>
+            <option value="instance_hour">instance_hour</option>
+            <option value="TB_month">TB_month</option>
+            <option value="GB_transfer">GB_transfer</option>
+            <option value="consulting_day">consulting_day</option>
+            <option value="unit">unit</option>
+            <option value="set">set</option>
+            <option value="project">project</option>
+            <option value="campaign">campaign</option>
+            <option value="monthly_subscription">monthly_subscription</option>
+            <option value="seat_license">seat_license</option>
+          </select>
+          <span class="error-msg">Required</span>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col">
+          <label for="required_by_date">Required by Date <span class="req">*</span></label>
+          <input type="date" id="required_by_date" required>
+          <span class="error-msg">Required</span>
+        </div>
+        <div class="col">
+          <label for="delivery_address">Delivery Address <span class="req">*</span></label>
+          <input type="text" id="delivery_address" placeholder="e.g. Berlin, DE" required>
+          <span class="error-msg">Required</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Supplier ──────────────────────────── -->
+    <div class="section">
+      <div class="section-title">Supplier Preference</div>
+      <div class="row">
+        <div class="col">
+          <label for="preferred_supplier">Preferred Supplier <span class="opt">(optional)</span></label>
+          <input type="text" id="preferred_supplier" placeholder="e.g. Dell Enterprise Europe">
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Free text ─────────────────────────── -->
+    <div class="section">
+      <div class="section-title">Request Description</div>
+      <div class="row">
+        <div class="col">
+          <label for="request_text">Description <span class="req">*</span></label>
+          <textarea id="request_text" required
+            placeholder="Describe your purchase request in detail. Include budget, specs, urgency, and any constraints..."></textarea>
+          <span class="error-msg">Required</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn-secondary" id="btnClear">Clear</button>
+      <button type="submit" class="btn-primary" id="btnSubmit">Submit Request</button>
+    </div>
+  </form>
+
+  <!-- ── JSON output ─────────────────────────── -->
+  <div class="output-panel" id="outputPanel">
+    <div class="section-title">Generated input.yaml payload</div>
+    <pre id="outputJson"></pre>
+  </div>
+</main>
+
+<script>
+// ── Category L1 → L2 mapping (from categories.csv) ─────────
+const categoryMap = {
+  "IT": [
+    { l2: "Laptops",                          unit: "device" },
+    { l2: "Mobile Workstations",              unit: "device" },
+    { l2: "Desktop Workstations",             unit: "device" },
+    { l2: "Monitors",                         unit: "device" },
+    { l2: "Docking Stations",                 unit: "device" },
+    { l2: "Smartphones",                      unit: "device" },
+    { l2: "Tablets",                          unit: "device" },
+    { l2: "Rugged Devices",                   unit: "device" },
+    { l2: "Accessories Bundles",              unit: "set" },
+    { l2: "Replacement / Break-Fix Pool Devices", unit: "device" },
+    { l2: "Cloud Compute",                    unit: "instance_hour" },
+    { l2: "Cloud Storage",                    unit: "TB_month" },
+    { l2: "Cloud Networking",                 unit: "GB_transfer" },
+    { l2: "Managed Cloud Platform Services",  unit: "monthly_subscription" },
+    { l2: "Cloud Security Services",          unit: "seat_license" },
+  ],
+  "Facilities": [
+    { l2: "Workstations and Desks",           unit: "unit" },
+    { l2: "Office Chairs",                    unit: "unit" },
+    { l2: "Meeting Room Furniture",           unit: "set" },
+    { l2: "Storage Cabinets",                 unit: "unit" },
+    { l2: "Reception and Lounge Furniture",   unit: "project" },
+  ],
+  "Professional Services": [
+    { l2: "Cloud Architecture Consulting",    unit: "consulting_day" },
+    { l2: "Cybersecurity Advisory",           unit: "consulting_day" },
+    { l2: "Data Engineering Services",        unit: "consulting_day" },
+    { l2: "Software Development Services",    unit: "consulting_day" },
+    { l2: "IT Project Management Services",   unit: "consulting_day" },
+  ],
+  "Marketing": [
+    { l2: "Search Engine Marketing (SEM)",    unit: "campaign" },
+    { l2: "Social Media Advertising",         unit: "campaign" },
+    { l2: "Content Production Services",      unit: "project" },
+    { l2: "Marketing Analytics Services",     unit: "monthly_subscription" },
+    { l2: "Influencer Campaign Management",   unit: "campaign" },
+  ],
+};
+
+const l1Select  = document.getElementById("category_l1");
+const l2Select  = document.getElementById("category_l2");
+const uomSelect = document.getElementById("unit_of_measure");
+const unitHint  = document.getElementById("unitHint");
+
+// Populate L2 when L1 changes
+l1Select.addEventListener("change", () => {
+  const l1 = l1Select.value;
+  l2Select.innerHTML = "";
+  unitHint.textContent = "";
+
+  if (!l1) {
+    l2Select.disabled = true;
+    l2Select.innerHTML = '<option value="">Select L1 first...</option>';
+    return;
+  }
+
+  l2Select.disabled = false;
+  l2Select.innerHTML = '<option value="">Select...</option>';
+  categoryMap[l1].forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c.l2;
+    opt.textContent = c.l2;
+    opt.dataset.unit = c.unit;
+    l2Select.appendChild(opt);
+  });
+});
+
+// Auto-select UOM when L2 changes
+l2Select.addEventListener("change", () => {
+  const selected = l2Select.options[l2Select.selectedIndex];
+  const suggestedUnit = selected?.dataset?.unit;
+  if (suggestedUnit) {
+    uomSelect.value = suggestedUnit;
+    unitHint.textContent = `Typical unit for this category: ${suggestedUnit}`;
+  } else {
+    unitHint.textContent = "";
+  }
+});
+
+// ── Form submission ─────────────────────────────────────────
+const form        = document.getElementById("intakeForm");
+const outputPanel = document.getElementById("outputPanel");
+const outputJson  = document.getElementById("outputJson");
+
+form.addEventListener("submit", (e) => {
+  e.preventDefault();
+
+  // Clear previous errors
+  form.querySelectorAll(".field-error").forEach(el => el.classList.remove("field-error"));
+  form.querySelectorAll(".error-msg").forEach(el => el.classList.remove("visible"));
+
+  // Collect values
+  const data = {
+    business_unit:     val("business_unit"),
+    category_l1:       val("category_l1"),
+    category_l2:       val("category_l2"),
+    quantity:          numVal("quantity"),
+    unit_of_measure:   val("unit_of_measure"),
+    required_by_date:  val("required_by_date"),
+    preferred_supplier: val("preferred_supplier") || null,
+    delivery_address:  val("delivery_address"),
+    request_text:      val("request_text"),
+  };
+
+  // Validate required fields
+  const requiredFields = [
+    "business_unit", "category_l1", "category_l2",
+    "unit_of_measure", "required_by_date", "delivery_address", "request_text"
+  ];
+
+  let valid = true;
+  requiredFields.forEach(id => {
+    if (!data[id]) {
+      markError(id);
+      valid = false;
+    }
+  });
+
+  if (!valid) {
+    outputPanel.classList.remove("visible");
+    return;
+  }
+
+  // Show JSON output
+  outputPanel.classList.add("visible");
+  outputJson.textContent = JSON.stringify(data, null, 2);
+  outputPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+// ── Clear ───────────────────────────────────────────────────
+document.getElementById("btnClear").addEventListener("click", () => {
+  form.reset();
+  l2Select.disabled = true;
+  l2Select.innerHTML = '<option value="">Select L1 first...</option>';
+  unitHint.textContent = "";
+  outputPanel.classList.remove("visible");
+  form.querySelectorAll(".field-error").forEach(el => el.classList.remove("field-error"));
+  form.querySelectorAll(".error-msg").forEach(el => el.classList.remove("visible"));
+});
+
+// ── Helpers ─────────────────────────────────────────────────
+function val(id) {
+  return document.getElementById(id).value.trim();
+}
+
+function numVal(id) {
+  const v = document.getElementById(id).value.trim();
+  return v === "" ? null : Number(v);
+}
+
+function markError(id) {
+  const el = document.getElementById(id);
+  el.classList.add("field-error");
+  const msg = el.parentElement.querySelector(".error-msg");
+  if (msg) msg.classList.add("visible");
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+# ============================================================
+# 01_intake  –  Validated Request Output
+# ============================================================
+# After the portal runs a first batch of simple integrity
+# checks, the request is emitted with the original fields
+# plus intake metadata.
+#
+# This output feeds directly into 02_checker as its input.
+#
+# Assumptions: single country (CH), currency (CHF), language (en).
+# ============================================================
+
+schema_version: "1.0"
+module: 01_intake
+direction: output
+description: >
+  Request that passed (or was flagged by) the portal's basic
+  integrity checks. Combines the original structured + unstructured
+  data with intake metadata.
+
+fields:
+
+  # ── Intake metadata ────────────────────────────────────────
+
+  intake_id:
+    type: string
+    required: true
+    description: >
+      Internal tracking ID assigned at intake.
+      Format: INK-XXXXXX (auto-generated).
+    examples:
+      - "INK-000001"
+
+  received_at:
+    type: string
+    format: datetime      # ISO 8601 (YYYY-MM-DDTHH:MM:SSZ)
+    required: true
+    description: Timestamp when the portal received the form.
+
+  # ── Resulting Structured fields ────────────
+
+  business_unit:
+    type: string
+    required: true
+
+  category_l1:
+    type: string
+    required: true
+    enum:
+      - IT
+      - Facilities
+      - Professional Services
+      - Marketing
+
+  category_l2:
+    type: string
+    required: true
+    description: >
+      Detailed subcategory. Must be a valid child of the selected
+      category_l1 (validated against categories.csv).
+    enum:
+      # IT
+      - Laptops
+      - Mobile Workstations
+      - Desktop Workstations
+      - Monitors
+      - Docking Stations
+      - Smartphones
+      - Tablets
+      - Rugged Devices
+      - Accessories Bundles
+      - Replacement / Break-Fix Pool Devices
+      - Cloud Compute
+      - Cloud Storage
+      - Cloud Networking
+      - Managed Cloud Platform Services
+      - Cloud Security Services
+      # Facilities
+      - Workstations and Desks
+      - Office Chairs
+      - Meeting Room Furniture
+      - Storage Cabinets
+      - Reception and Lounge Furniture
+      # Professional Services
+      - Cloud Architecture Consulting
+      - Cybersecurity Advisory
+      - Data Engineering Services
+      - Software Development Services
+      - IT Project Management Services
+      # Marketing
+      - Search Engine Marketing (SEM)
+      - Social Media Advertising
+      - Content Production Services
+      - Marketing Analytics Services
+      - Influencer Campaign Management
+
+  quantity:
+    type: number
+    required: true
+    nullable: true
+
+  unit_of_measure:
+    type: string
+    required: true
+
+  required_by_date:
+    type: string
+    format: date
+    required: true
+
+  preferred_supplier:
+    type: string
+    required: false
+    nullable: true
+
+  delivery_address:
+    type: string
+    required: true
+
+  # ── Remaining unstructured field ───────────
+
+  request_text:
+    type: string
+    required: true
+    format: free_text

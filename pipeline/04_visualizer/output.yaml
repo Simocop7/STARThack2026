@@ -1,0 +1,149 @@
+# ============================================================
+# 04_visualizer  –  Ranking Visualization Output
+# ============================================================
+# Produces a self-contained HTML dashboard that visualizes
+# the top-2 suppliers in three key dimensions:
+#   1. Most Trusted    – ranked by quality_score (desc)
+#   2. Fastest Shipment – ranked by standard_lead_time_days (asc)
+#   3. Lowest Cost      – ranked by total_price (asc)
+#
+# The HTML is a single file with embedded CSS/JS, no external
+# dependencies. It can be opened directly in a browser.
+# ============================================================
+
+schema_version: "1.0"
+module: 04_visualizer
+direction: output
+description: >
+  A self-contained HTML file displaying a procurement sourcing
+  dashboard for a single request. Shows the top-2 suppliers
+  per dimension side-by-side with key metrics and score bars.
+
+fields:
+
+  request_id:
+    type: string
+    required: true
+    description: The request being visualized (REQ-XXXXXX).
+
+  generated_at:
+    type: string
+    format: datetime
+    required: true
+    description: Timestamp when the visualization was generated.
+
+  # ── Dimension rankings ─────────────────────────────────────
+
+  dimensions:
+    type: list
+    required: true
+    description: >
+      Three ranking dimensions, each with the top-2 suppliers.
+    item_schema:
+
+      dimension_key:
+        type: string
+        enum:
+          - most_trusted
+          - fastest_shipment
+          - lowest_cost
+        description: Machine-readable dimension identifier.
+
+      dimension_label:
+        type: string
+        description: Human-readable label shown in the UI.
+        examples:
+          - "Most Trusted"
+          - "Fastest Shipment"
+          - "Lowest Cost"
+
+      sort_field:
+        type: string
+        description: >
+          The field from the ranking used for sorting in this
+          dimension.
+        examples:
+          - "score_breakdown.quality_score"
+          - "standard_lead_time_days"
+          - "total_price"
+
+      sort_direction:
+        type: string
+        enum: [asc, desc]
+        description: >
+          Whether lower or higher values are better.
+
+      top_suppliers:
+        type: list
+        required: true
+        description: >
+          The top-2 suppliers for this dimension, ordered best
+          first. May contain fewer than 2 if fewer viable
+          suppliers exist.
+        item_schema:
+
+          position:
+            type: integer
+            description: 1 or 2.
+
+          supplier_id:
+            type: string
+          supplier_name:
+            type: string
+
+          highlight_value:
+            type: string
+            description: >
+              The formatted primary metric for this dimension.
+            examples:
+              - "0.92"          # quality_score for most_trusted
+              - "14 days"       # lead time for fastest_shipment
+              - "CHF 35,712"    # total price for lowest_cost
+
+          total_price:
+            type: number
+            description: Total price in CHF (always shown).
+
+          unit_price:
+            type: number
+
+          standard_lead_time_days:
+            type: number
+
+          composite_score:
+            type: number
+
+          score_breakdown:
+            type: object
+            fields:
+              price_score:
+                type: number
+              quality_score:
+                type: number
+              risk_score:
+                type: number
+              esg_score:
+                type: number
+              lead_time_score:
+                type: number
+
+          is_preferred:
+            type: boolean
+          is_incumbent:
+            type: boolean
+          meets_lead_time:
+            type: boolean
+
+          recommendation_note:
+            type: string
+            nullable: true
+
+  # ── Output format ──────────────────────────────────────────
+
+  html:
+    type: string
+    format: html
+    required: true
+    description: >
+      The complete self-contained HTML document as a string.
+      Can be written to a .html file and opened in any browser.

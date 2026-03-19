@@ -1,0 +1,212 @@
+# ============================================================
+# 03_ranker  –  Supplier Ranking Output
+# ============================================================
+# Produces a top-k ranking of suppliers for the given request.
+# Only suppliers with a non-negative relevance score appear.
+# Irrelevant / disqualified suppliers are excluded entirely.
+#
+# Assumptions: single country (CH), currency (CHF), language (en).
+# ============================================================
+
+schema_version: "1.0"
+module: 03_ranker
+direction: output
+description: >
+  Scored and ranked list of candidate suppliers for a single
+  validated request. Only suppliers with score >= 0 are
+  included. The list is ordered by rank (1 = best).
+
+fields:
+
+  # ── Request reference ──────────────────────────────────────
+
+  request_id:
+    type: string
+    required: true
+    description: The request this ranking refers to (REQ-XXXXXX).
+
+  ranked_at:
+    type: string
+    format: datetime
+    required: true
+    description: Timestamp when the ranking was computed.
+
+  # ── Ranking parameters ─────────────────────────────────────
+
+  k:
+    type: integer
+    required: true
+    description: >
+      Maximum number of suppliers returned. Actual list may
+      be shorter if fewer suppliers have score >= 0.
+
+  scoring_weights:
+    type: object
+    required: true
+    description: >
+      Weights used for the composite score, for transparency
+      and audit. All weights sum to 1.0.
+    fields:
+      price:
+        type: number
+        description: Weight for price competitiveness (0-1).
+      quality:
+        type: number
+        description: Weight for quality_score (0-1).
+      risk:
+        type: number
+        description: Weight for risk_score — inverted (0-1).
+      esg:
+        type: number
+        description: Weight for ESG score (0-1).
+      lead_time:
+        type: number
+        description: Weight for delivery feasibility (0-1).
+
+  # ── Ranked supplier list ───────────────────────────────────
+
+  ranking:
+    type: list
+    required: true
+    description: >
+      Ordered list of scored suppliers. Only entries with
+      score >= 0 are present. Empty list means no viable
+      supplier was found.
+    item_schema:
+
+      rank:
+        type: integer
+        description: Position in the ranking (1-based).
+
+      supplier_id:
+        type: string
+        description: Supplier identifier (SUP-XXXX).
+
+      supplier_name:
+        type: string
+
+      # ── Eligibility flags ──────────────────────────────────
+
+      is_preferred:
+        type: boolean
+        description: Whether the supplier is preferred for this category.
+
+      is_incumbent:
+        type: boolean
+        description: Whether the supplier is the current incumbent.
+
+      meets_lead_time:
+        type: boolean
+        description: >
+          Whether standard or expedited lead time can meet
+          required_by_date.
+
+      # ── Pricing details (all CHF) ─────────────────────────
+
+      pricing_tier_applied:
+        type: string
+        description: >
+          Human-readable label of the matched quantity tier.
+        examples:
+          - "1-99 units"
+          - "100-499 units"
+          - "500-1999 units"
+
+      unit_price:
+        type: number
+        description: Unit price in CHF at the matched tier (standard).
+
+      total_price:
+        type: number
+        description: unit_price x quantity (CHF).
+
+      expedited_unit_price:
+        type: number
+        nullable: true
+        description: Unit price in CHF if expedited delivery is needed.
+
+      expedited_total_price:
+        type: number
+        nullable: true
+
+      standard_lead_time_days:
+        type: number
+
+      expedited_lead_time_days:
+        type: number
+        nullable: true
+
+      # ── Scoring breakdown ──────────────────────────────────
+
+      score_breakdown:
+        type: object
+        description: >
+          Individual dimension scores before weighting.
+          Each is normalised to [0, 1].
+        fields:
+          price_score:
+            type: number
+            description: >
+              Normalised price competitiveness (1 = cheapest
+              among candidates, 0 = most expensive).
+          quality_score:
+            type: number
+            description: Normalised quality (from supplier master).
+          risk_score:
+            type: number
+            description: >
+              Normalised risk (inverted: 1 = lowest risk,
+              0 = highest risk).
+          esg_score:
+            type: number
+            description: Normalised ESG rating.
+          lead_time_score:
+            type: number
+            description: >
+              1 if standard lead time meets required_by_date,
+              0.5 if only expedited meets it, 0 if neither.
+
+      composite_score:
+        type: number
+        required: true
+        description: >
+          Weighted composite score. >= 0 means the supplier is
+          a viable candidate. Negative scores are excluded from
+          the output entirely.
+
+      recommendation_note:
+        type: string
+        nullable: true
+        description: >
+          Short human-readable rationale for this supplier's
+          position in the ranking. Useful for audit trail and
+          operator review.
+        examples:
+          - >
+            Lowest total price at CHF 35,712. Incumbent supplier.
+          - >
+            Requester's preferred supplier. Highest quality score
+            (85) but CHF 1,488 above lowest option.
+
+  # ── Excluded suppliers (for audit) ─────────────────────────
+
+  excluded:
+    type: list
+    required: false
+    nullable: true
+    description: >
+      Suppliers that were evaluated but scored < 0 or were
+      disqualified. Included for audit transparency.
+    item_schema:
+      supplier_id:
+        type: string
+      supplier_name:
+        type: string
+      reason:
+        type: string
+        description: Why this supplier was excluded.
+        examples:
+          - "Restricted for this category"
+          - "No active pricing for category Docking Stations"
+          - "Contract status: expired"
+          - "Capacity insufficient for requested quantity"

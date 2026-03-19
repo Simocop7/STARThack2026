@@ -1,0 +1,136 @@
+# ============================================================
+# 04_visualizer  –  Ranking Visualization Input
+# ============================================================
+# Consumes the full output of 03_ranker and produces an HTML
+# dashboard highlighting the top-2 suppliers per dimension:
+#   - Most Trusted   (highest quality_score)
+#   - Fastest Shipment (lowest standard_lead_time_days)
+#   - Lowest Cost     (lowest total_price)
+#
+# Assumptions: single country (CH), currency (CHF), language (en).
+# ============================================================
+
+schema_version: "1.0"
+module: 04_visualizer
+direction: input
+description: >
+  Takes the complete 03_ranker output (ranked supplier list with
+  scoring breakdowns) as input. The schema is identical to
+  03_ranker/output.yaml.
+
+source: 03_ranker/output.yaml
+
+fields:
+
+  # ── Request reference ──────────────────────────────────────
+
+  request_id:
+    type: string
+    required: true
+    description: The request this ranking refers to (REQ-XXXXXX).
+
+  ranked_at:
+    type: string
+    format: datetime
+    required: true
+    description: Timestamp when the ranking was computed.
+
+  # ── Ranking parameters ─────────────────────────────────────
+
+  k:
+    type: integer
+    required: true
+    description: >
+      Maximum number of suppliers returned from the ranker.
+
+  scoring_weights:
+    type: object
+    required: true
+    description: >
+      Weights used for the composite score in 03_ranker.
+    fields:
+      price:
+        type: number
+      quality:
+        type: number
+      risk:
+        type: number
+      esg:
+        type: number
+      lead_time:
+        type: number
+
+  # ── Ranked supplier list ───────────────────────────────────
+
+  ranking:
+    type: list
+    required: true
+    description: >
+      Ordered list of scored suppliers from 03_ranker.
+    item_schema:
+
+      rank:
+        type: integer
+      supplier_id:
+        type: string
+      supplier_name:
+        type: string
+
+      is_preferred:
+        type: boolean
+      is_incumbent:
+        type: boolean
+      meets_lead_time:
+        type: boolean
+
+      pricing_tier_applied:
+        type: string
+      unit_price:
+        type: number
+      total_price:
+        type: number
+      expedited_unit_price:
+        type: number
+        nullable: true
+      expedited_total_price:
+        type: number
+        nullable: true
+      standard_lead_time_days:
+        type: number
+      expedited_lead_time_days:
+        type: number
+        nullable: true
+
+      score_breakdown:
+        type: object
+        fields:
+          price_score:
+            type: number
+          quality_score:
+            type: number
+          risk_score:
+            type: number
+          esg_score:
+            type: number
+          lead_time_score:
+            type: number
+
+      composite_score:
+        type: number
+      recommendation_note:
+        type: string
+        nullable: true
+
+  # ── Excluded suppliers ─────────────────────────────────────
+
+  excluded:
+    type: list
+    required: false
+    nullable: true
+    item_schema:
+      supplier_id:
+        type: string
+      supplier_name:
+        type: string
+      reason:
+        type: string
