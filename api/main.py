@@ -105,14 +105,18 @@ async def rate_limit_middleware(request: Request, call_next):
     return await call_next(request)
 
 
-_allowed_origins = [
-    o.strip()
-    for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
-    if o.strip() and o.strip() != "*"
-]
+_cors_env = os.environ.get("CORS_ORIGINS", "http://localhost:5173").strip()
+if _cors_env == "*":
+    _allowed_origins = ["*"]
+else:
+    _allowed_origins = [
+        o.strip()
+        for o in _cors_env.split(",")
+        if o.strip()
+    ]
 if not _allowed_origins:
     _allowed_origins = ["http://localhost:5173"]
-    logger.warning("CORS_ORIGINS was empty or wildcard '*' — falling back to localhost only")
+    logger.warning("CORS_ORIGINS was empty — falling back to localhost only")
 
 app.add_middleware(
     CORSMiddleware,
@@ -190,6 +194,7 @@ _SUPPORTED_LANGUAGES = {"en", "fr", "de", "es", "pt", "it", "ja"}
 class VoiceInput(BaseModel):
     transcript: str = Field(..., min_length=1, max_length=5000)
     language: str = "en"
+    delivery_address_context: str | None = None  # "confirming" | "needs_exact" | None
 
     @field_validator("language")
     @classmethod
@@ -205,7 +210,12 @@ async def parse_voice(voice: VoiceInput) -> dict:
     from datetime import date as date_mod
 
     today = date_mod.today().isoformat()
-    result = await parse_voice_transcript(voice.transcript, voice.language, today)
+    result = await parse_voice_transcript(
+        voice.transcript,
+        voice.language,
+        today,
+        delivery_address_context=voice.delivery_address_context,
+    )
     return result
 
 
@@ -213,6 +223,8 @@ class FollowUpRequest(BaseModel):
     missing_fields: list[str] = Field(..., min_length=1, max_length=10)
     language: str = "en"
     is_first_round: bool = False
+    delivery_address_phase: str | None = None  # "confirming" | "needs_exact" | None
+    delivery_address_city: str | None = None  # City/country the user mentioned (for "needs_exact")
 
     @field_validator("language")
     @classmethod
@@ -222,6 +234,20 @@ class FollowUpRequest(BaseModel):
         return v
 
 
+def _natural_field_question(fields: list[str]) -> str:
+    """Convert technical field names to natural language fragments."""
+    mapping = {
+        "quantity": "how many you need",
+        "delivery date": "when you need it by",
+        "required_by_date": "when you need it by",
+        "unit_of_measure": "the unit of measure",
+    }
+    parts = [mapping.get(f, f) for f in fields]
+    if len(parts) == 1:
+        return parts[0]
+    return ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
 @app.post("/api/generate-followup", dependencies=[Depends(verify_api_key)])
 async def generate_followup(req: FollowUpRequest) -> dict:
     """Generate a natural follow-up question asking for missing procurement fields."""
@@ -229,6 +255,31 @@ async def generate_followup(req: FollowUpRequest) -> dict:
 
     client = get_azure_client()
     deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
+
+    # Handle delivery address phases with specific prompts (no LLM call needed)
+    if req.delivery_address_phase == "confirming":
+        # Filter out delivery_location from missing fields for the LLM prompt
+        other_missing = [f for f in req.missing_fields if f != "delivery_location"]
+        other_str = ", ".join(other_missing) if other_missing else ""
+
+        if req.is_first_round and other_str:
+            text = f"Got it! Should I send this to the usual location, or would you prefer somewhere else? Also, {_natural_field_question(other_missing)}"
+        elif req.is_first_round:
+            text = "Got it! Should I send this to the usual location, or would you prefer somewhere else?"
+        elif other_str:
+            text = f"Should I send this to the usual location, or somewhere else? I also still need {_natural_field_question(other_missing)}."
+        else:
+            text = "Should I send this to the usual location, or would you prefer somewhere else?"
+        return {"text": text}
+
+    if req.delivery_address_phase == "needs_exact":
+        city = req.delivery_address_city or "that location"
+        other_missing = [f for f in req.missing_fields if f != "delivery_location"]
+        if other_missing:
+            text = f"I got {city}. Could you give me a more precise address, like a street and building? I also still need {_natural_field_question(other_missing)}."
+        else:
+            text = f"I got {city}. Could you give me a more precise address, like a street and building?"
+        return {"text": text}
 
     fields_str = ", ".join(req.missing_fields)
 

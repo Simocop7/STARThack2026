@@ -63,6 +63,8 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
     const lastTranscriptChangeRef = useRef<number>(0);
     const maxDurationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const inactivityTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    // Session counter: prevents onend callbacks from stale sessions interfering
+    const sessionIdRef = useRef(0);
 
     useEffect(() => {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -101,7 +103,20 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) return;
 
-      // Clean up any lingering previous session
+      // Clean up any lingering previous session — MUST cancel timers first
+      // so they don't fire and kill the new session we're about to create
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+      if (maxDurationTimerRef.current) {
+        clearTimeout(maxDurationTimerRef.current);
+        maxDurationTimerRef.current = null;
+      }
+      if (inactivityTimerRef.current) {
+        clearInterval(inactivityTimerRef.current);
+        inactivityTimerRef.current = null;
+      }
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch { /* ignore */ }
         recognitionRef.current = null;
@@ -114,12 +129,18 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
       recognition.interimResults = true;
       recognition.lang = LANG_MAP[language] || "en-US";
 
+      // Bump session so stale onend callbacks are ignored
+      sessionIdRef.current += 1;
+      const thisSession = sessionIdRef.current;
+
       finalTranscriptRef.current = "";
       lastTranscriptChangeRef.current = Date.now();
 
       let lastSeenTranscript = "";
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
+        // Ignore events from a stale session
+        if (thisSession !== sessionIdRef.current) return;
         let interimText = "";
         let finalText = "";
 
@@ -162,13 +183,39 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
       };
 
       recognition.onerror = (event: { error: string }) => {
-        if (event.error !== "no-speech") {
-          console.error("Speech recognition error:", event.error);
+        if (thisSession !== sessionIdRef.current) return;
+        if (event.error === "no-speech") {
+          // "no-speech" is normal — browser fires onend after this, which handles cleanup.
+          // Do NOT call stopListening here as it kills the session prematurely.
+          return;
         }
+        if (event.error === "aborted") {
+          // "aborted" happens when we programmatically stop — safe to ignore
+          return;
+        }
+        console.error("Speech recognition error:", event.error);
         stopListening();
       };
 
       recognition.onend = () => {
+        // Ignore onend from a stale session (previous recognition that fired late)
+        if (thisSession !== sessionIdRef.current) return;
+
+        // Clean up all timers since the session is ending
+        if (silenceTimerRef.current) {
+          clearTimeout(silenceTimerRef.current);
+          silenceTimerRef.current = null;
+        }
+        if (maxDurationTimerRef.current) {
+          clearTimeout(maxDurationTimerRef.current);
+          maxDurationTimerRef.current = null;
+        }
+        if (inactivityTimerRef.current) {
+          clearInterval(inactivityTimerRef.current);
+          inactivityTimerRef.current = null;
+        }
+        recognitionRef.current = null;
+
         setListening(false);
         // Use final transcript, but fall back to interim if no final result arrived
         const transcript = finalTranscriptRef.current.trim() || lastSeenTranscript.trim();
@@ -182,9 +229,10 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
       try {
         recognition.start();
       } catch {
-        // Browser may not be ready (e.g. previous session still closing) — retry once after a short delay
-        if (retryCount < 2) {
-          setTimeout(() => startListening(retryCount + 1), 300);
+        // Browser may not be ready (e.g. previous session still closing) — retry after delay
+        if (retryCount < 3) {
+          const delay = 300 + retryCount * 200; // 300, 500, 700ms
+          setTimeout(() => startListening(retryCount + 1), delay);
         }
         return;
       }
@@ -200,11 +248,14 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
           }
         }, 15000);
 
-        // Inactivity: stop if transcript hasn't changed for 2.5s
-        // (handles noisy rooms where interim results keep coming but text doesn't change)
+        // Inactivity: stop if transcript hasn't changed for 3s
+        // BUT only after the user has actually started speaking (has some transcript).
+        // This prevents cutting off before the user begins talking.
         inactivityTimerRef.current = setInterval(() => {
+          const hasSpoken = finalTranscriptRef.current.trim() || lastSeenTranscript.trim();
+          if (!hasSpoken) return; // Don't timeout if user hasn't spoken yet
           const elapsed = Date.now() - lastTranscriptChangeRef.current;
-          if (elapsed > 2500 && recognitionRef.current) {
+          if (elapsed > 3000 && recognitionRef.current) {
             recognitionRef.current.stop();
             recognitionRef.current = null;
           }

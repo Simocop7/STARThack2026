@@ -60,6 +60,9 @@ export default function EmployeePortal({ onBack }: Props) {
   const pendingFollowUpRef = useRef(false);
   // Tracks the voice conversation round (0 = first interaction)
   const voiceRoundRef = useRef(0);
+  // Delivery address conversation phase from RequestForm
+  const deliveryAddressPhaseRef = useRef<string>("not_asked");
+  const vagueAddressCityRef = useRef<string | null>(null);
 
   const i = t(language);
 
@@ -75,6 +78,8 @@ export default function EmployeePortal({ onBack }: Props) {
     setTtsText(null);
     setConversationPhase("idle");
     voiceRoundRef.current = 0;
+    deliveryAddressPhaseRef.current = "not_asked";
+    vagueAddressCityRef.current = null;
 
     // Start listening after a brief delay for overlay to mount
     setTimeout(() => {
@@ -97,9 +102,17 @@ export default function EmployeePortal({ onBack }: Props) {
   }, []);
 
   // ── Called by RequestForm after voice parse with missing required fields ──
-  const handleMissingFieldsFromOverlay = useCallback(async (fields: string[]) => {
+  const handleMissingFieldsFromOverlay = useCallback(async (
+    fields: string[],
+    addrPhase?: string,
+    vagueCity?: string | null,
+  ) => {
     setOverlayPhase("processing");
     setInterimTranscript("");
+
+    // Store delivery address context for the follow-up API
+    if (addrPhase) deliveryAddressPhaseRef.current = addrPhase;
+    if (vagueCity !== undefined) vagueAddressCityRef.current = vagueCity;
 
     const isFirstRound = voiceRoundRef.current === 0;
     voiceRoundRef.current += 1;
@@ -115,6 +128,12 @@ export default function EmployeePortal({ onBack }: Props) {
     } else {
       // Fields still missing — ask follow-up via LLM
       pendingFollowUpRef.current = true;
+
+      // Determine delivery address phase to send to backend
+      const deliveryPhase = fields.includes("delivery_location")
+        ? deliveryAddressPhaseRef.current
+        : null;
+
       try {
         const res = await fetch("/api/generate-followup", {
           method: "POST",
@@ -123,6 +142,8 @@ export default function EmployeePortal({ onBack }: Props) {
             missing_fields: fields,
             language,
             is_first_round: isFirstRound,
+            delivery_address_phase: deliveryPhase,
+            delivery_address_city: vagueAddressCityRef.current,
           }),
         });
         if (res.ok) {
@@ -153,9 +174,13 @@ export default function EmployeePortal({ onBack }: Props) {
         setOverlayPhase("listening");
         setInterimTranscript("");
         setTtsText(null);
+        // Reset conversationPhase so the next setConversationPhase("speaking")
+        // is seen as a change by React and re-triggers VoiceConversation's TTS effect
+        setConversationPhase("idle");
+        // Longer delay gives browser time to release audio resources after TTS
         setTimeout(() => {
           voiceInputRef.current?.startListening();
-        }, 500);
+        }, 800);
       } else {
         // All fields filled — close overlay
         setOverlayPhase("closing");
@@ -340,6 +365,8 @@ export default function EmployeePortal({ onBack }: Props) {
     setConversationPhase("idle");
     setOverlayActive(false);
     setInterimTranscript("");
+    deliveryAddressPhaseRef.current = "not_asked";
+    vagueAddressCityRef.current = null;
   }
 
   function getAutoDetectedFields(): string[] {

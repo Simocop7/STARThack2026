@@ -36,7 +36,7 @@ interface Props {
   /** Expose a way for parent to force-submit a transcript (bypass VoiceInput) */
   onRegisterForceTranscript?: (fn: (transcript: string) => void) => void;
   /** Called after voice parse with list of still-missing required fields */
-  onMissingFieldsDetected?: (fields: string[]) => void;
+  onMissingFieldsDetected?: (fields: string[], deliveryAddressPhase?: string, vagueAddress?: string | null) => void;
 }
 
 const DEFAULT_DELIVERY_ADDRESS = "St. Gallen, Olma Halle 9";
@@ -81,6 +81,13 @@ export default function RequestForm({
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [categoryIndex, setCategoryIndex] = useState<Record<string, string[]>>({});
+
+  // Delivery address conversation phase:
+  // "not_asked" → initial, "confirming" → asked if default is ok,
+  // "needs_exact" → user gave vague address, "done" → resolved
+  const deliveryAddressPhaseRef = useRef<"not_asked" | "confirming" | "needs_exact" | "done">("not_asked");
+  // Store the vague city/country for the "needs_exact" prompt
+  const vagueAddressRef = useRef<string | null>(null);
 
   const internalVoiceRef = useRef<VoiceInputHandle | null>(null);
   const effectiveVoiceRef = voiceInputRef ?? internalVoiceRef;
@@ -163,10 +170,20 @@ export default function RequestForm({
     }
 
     try {
+      // Pass delivery address context so the LLM knows what kind of answer to expect
+      const addressCtx =
+        deliveryAddressPhaseRef.current === "confirming" || deliveryAddressPhaseRef.current === "needs_exact"
+          ? deliveryAddressPhaseRef.current
+          : null;
+
       const res = await fetch("/api/parse-voice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript, language: form.language }),
+        body: JSON.stringify({
+          transcript,
+          language: form.language,
+          delivery_address_context: addressCtx,
+        }),
       });
 
       if (!res.ok) {
@@ -176,10 +193,34 @@ export default function RequestForm({
 
       const parsed = await res.json();
 
+      // Handle delivery address confirmation/extraction
+      if (parsed.delivery_address_confirmed === true) {
+        // User confirmed default location
+        deliveryAddressPhaseRef.current = "done";
+        vagueAddressRef.current = null;
+      } else if (parsed.delivery_address) {
+        if (parsed.address_is_vague) {
+          // User gave only a city/country — need exact address
+          vagueAddressRef.current = parsed.delivery_address;
+          deliveryAddressPhaseRef.current = "needs_exact";
+        } else {
+          // User gave a precise address
+          deliveryAddressPhaseRef.current = "done";
+          vagueAddressRef.current = null;
+        }
+      }
+
       // Merge parsed fields into form, preserving existing non-empty values
       // (important for follow-up rounds where user fills in missing fields)
       let updatedForm: FormData = formRef.current;
       setForm((prev) => {
+        const newDeliveryAddress =
+          parsed.delivery_address
+            ? parsed.delivery_address
+            : parsed.delivery_address_confirmed
+              ? prev.delivery_address  // keep default
+              : prev.delivery_address;
+
         const updated = {
           ...prev,
           request_text: prev.request_text || parsed.request_text || transcript,
@@ -187,7 +228,7 @@ export default function RequestForm({
           unit_of_measure: parsed.unit_of_measure || prev.unit_of_measure,
           required_by_date: parsed.required_by_date || prev.required_by_date,
           preferred_supplier: parsed.preferred_supplier || prev.preferred_supplier,
-          delivery_address: prev.delivery_address || DEFAULT_DELIVERY_ADDRESS,
+          delivery_address: newDeliveryAddress || DEFAULT_DELIVERY_ADDRESS,
         };
         formRef.current = updated;
         updatedForm = updated;
@@ -195,16 +236,26 @@ export default function RequestForm({
       });
 
       // Check which required fields are still missing based on actual form state
-      // (don't trust parsed.missing_fields — the LLM may report fields as missing even when extracted)
       const stillMissing: string[] = [];
       if (!updatedForm.quantity) stillMissing.push("quantity");
       if (!updatedForm.required_by_date) stillMissing.push("delivery date");
+
+      // Delivery address flow: if not resolved yet, add to missing
+      if (deliveryAddressPhaseRef.current === "not_asked") {
+        deliveryAddressPhaseRef.current = "confirming";
+        stillMissing.push("delivery_location");
+      } else if (deliveryAddressPhaseRef.current === "confirming" && !parsed.delivery_address_confirmed && !parsed.delivery_address) {
+        // User didn't answer the address question clearly — ask again
+        stillMissing.push("delivery_location");
+      } else if (deliveryAddressPhaseRef.current === "needs_exact") {
+        stillMissing.push("delivery_location");
+      }
+
       setMissingFields(stillMissing);
 
       if (overlayActive) {
-        // In overlay mode: notify parent about missing fields
-        // Don't auto-submit — let the overlay TTS finish first, user reviews the form after
-        onMissingFieldsDetected?.(stillMissing);
+        // In overlay mode: notify parent about missing fields + delivery address context
+        onMissingFieldsDetected?.(stillMissing, deliveryAddressPhaseRef.current, vagueAddressRef.current);
       } else if (voiceMode) {
         // Non-overlay voice mode: auto-submit regardless
         pendingAutoSubmit.current = true;
