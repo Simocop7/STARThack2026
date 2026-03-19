@@ -21,6 +21,9 @@ COPY ChainIQ-START-Hack-2026-/ ./ChainIQ-START-Hack-2026-/
 # Copy built frontend
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
+# Smoke-test: catch any import or data-loading errors at build time
+RUN python -c "from api.main import app; print('Import OK')"
+
 EXPOSE 8000
 
 # Railway injects $PORT at runtime; fall back to 8000 for local Docker runs
