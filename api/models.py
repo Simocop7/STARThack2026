@@ -60,10 +60,22 @@ class FormInput(BaseModel):
     unit_of_measure: Optional[str] = Field(None, max_length=100)
     category_l1: Optional[str] = Field(None, max_length=100)
     category_l2: Optional[str] = Field(None, max_length=100)
-    delivery_address: Optional[str] = Field(None, max_length=500)
+    delivery_country: Optional[str] = Field(None, max_length=3)
     required_by_date: Optional[date] = None
     preferred_supplier: Optional[str] = Field(None, max_length=200)
     language: str = "en"  # ISO 639-1 code chosen by user
+
+    @field_validator("delivery_country")
+    @classmethod
+    def validate_delivery_country(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.upper().strip()
+        if v not in _VALID_COUNTRY_CODES:
+            raise ValueError(
+                f"Invalid delivery country code: '{v}'. Must be one of: {', '.join(sorted(_VALID_COUNTRY_CODES))}"
+            )
+        return v
 
     @field_validator("language")
     @classmethod
@@ -115,7 +127,6 @@ class EnrichedRequest(BaseModel):
     category_l1: Optional[str] = None
     category_l2: Optional[str] = None
     delivery_country: Optional[str] = None
-    delivery_address: Optional[str] = None
     required_by_date: Optional[date] = None
     preferred_supplier: Optional[str] = None
 

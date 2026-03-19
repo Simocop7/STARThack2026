@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import CategoryDisambiguation from "./CategoryDisambiguation";
 import EmployeeReviewStep from "./EmployeeReviewStep";
 import RequestForm from "./RequestForm";
@@ -60,11 +60,66 @@ export default function EmployeePortal({ onBack }: Props) {
   const pendingFollowUpRef = useRef(false);
   // Tracks the voice conversation round (0 = first interaction)
   const voiceRoundRef = useRef(0);
-  // Delivery address conversation phase from RequestForm
-  const deliveryAddressPhaseRef = useRef<string>("not_asked");
-  const vagueAddressCityRef = useRef<string | null>(null);
+  // Track whether mic is actually active (from VoiceInput's onListeningChange)
+  const micActiveRef = useRef(false);
+  // Watchdog: if overlay says "listening" but mic died, restart after a delay
+  const watchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Count consecutive empty-end restarts to avoid infinite loops
+  const emptyEndCountRef = useRef(0);
 
   const i = t(language);
+
+  // Watchdog: when overlay is in "listening" phase, check that mic is really active.
+  // If mic died silently (e.g. browser killed it), restart after 2s.
+  const startWatchdog = useCallback(() => {
+    if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
+    watchdogTimerRef.current = setTimeout(() => {
+      if (overlayActive && overlayPhase === "listening" && !micActiveRef.current) {
+        console.warn("[VoiceWatchdog] Mic not active during listening phase — restarting");
+        voiceInputRef.current?.startListening();
+      }
+    }, 2500);
+  }, [overlayActive, overlayPhase]);
+
+  // Clear watchdog on unmount
+  useEffect(() => {
+    return () => {
+      if (watchdogTimerRef.current) {
+        clearTimeout(watchdogTimerRef.current);
+        watchdogTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // ── Mic state tracking ────────────────────────────────────────
+  const handleListeningChange = useCallback((listening: boolean) => {
+    micActiveRef.current = listening;
+    if (listening) {
+      emptyEndCountRef.current = 0; // Reset empty-end counter when mic starts successfully
+    }
+  }, []);
+
+  // ── Handle recognition ending with no transcript ──────────────
+  // This happens when: no-speech timeout, background noise only, mic cut off
+  // In overlay mode, automatically restart listening (up to a limit)
+  const handleEmptyEnd = useCallback(() => {
+    if (!overlayActive || overlayPhase !== "listening") return;
+
+    emptyEndCountRef.current += 1;
+    if (emptyEndCountRef.current > 5) {
+      // Too many consecutive empty ends — mic probably isn't working
+      console.warn("[Voice] Too many empty recognition sessions — stopping");
+      return;
+    }
+
+    // Restart listening after a brief pause
+    setTimeout(() => {
+      if (overlayActive && overlayPhase === "listening") {
+        voiceInputRef.current?.startListening();
+        startWatchdog();
+      }
+    }, 400);
+  }, [overlayActive, overlayPhase, startWatchdog]);
 
   // ── Activate voice overlay (one-shot flow) ──────────────────
   const handleActivateVoice = useCallback(() => {
@@ -78,20 +133,24 @@ export default function EmployeePortal({ onBack }: Props) {
     setTtsText(null);
     setConversationPhase("idle");
     voiceRoundRef.current = 0;
-    deliveryAddressPhaseRef.current = "not_asked";
-    vagueAddressCityRef.current = null;
+    emptyEndCountRef.current = 0;
 
     // Start listening after a brief delay for overlay to mount
     setTimeout(() => {
       voiceInputRef.current?.startListening();
+      startWatchdog();
     }, 300);
-  }, []);
+  }, [startWatchdog]);
 
   // ── Close overlay ───────────────────────────────────────────
   const handleOverlayClose = useCallback(() => {
     setOverlayPhase("closing");
     voiceInputRef.current?.stopListening();
     pendingFollowUpRef.current = false;
+    if (watchdogTimerRef.current) {
+      clearTimeout(watchdogTimerRef.current);
+      watchdogTimerRef.current = null;
+    }
     setTimeout(() => {
       setOverlayActive(false);
       setVoiceMode(false);
@@ -104,15 +163,9 @@ export default function EmployeePortal({ onBack }: Props) {
   // ── Called by RequestForm after voice parse with missing required fields ──
   const handleMissingFieldsFromOverlay = useCallback(async (
     fields: string[],
-    addrPhase?: string,
-    vagueCity?: string | null,
   ) => {
     setOverlayPhase("processing");
     setInterimTranscript("");
-
-    // Store delivery address context for the follow-up API
-    if (addrPhase) deliveryAddressPhaseRef.current = addrPhase;
-    if (vagueCity !== undefined) vagueAddressCityRef.current = vagueCity;
 
     const isFirstRound = voiceRoundRef.current === 0;
     voiceRoundRef.current += 1;
@@ -129,11 +182,6 @@ export default function EmployeePortal({ onBack }: Props) {
       // Fields still missing — ask follow-up via LLM
       pendingFollowUpRef.current = true;
 
-      // Determine delivery address phase to send to backend
-      const deliveryPhase = fields.includes("delivery_location")
-        ? deliveryAddressPhaseRef.current
-        : null;
-
       try {
         const res = await fetch("/api/generate-followup", {
           method: "POST",
@@ -142,8 +190,6 @@ export default function EmployeePortal({ onBack }: Props) {
             missing_fields: fields,
             language,
             is_first_round: isFirstRound,
-            delivery_address_phase: deliveryPhase,
-            delivery_address_city: vagueAddressCityRef.current,
           }),
         });
         if (res.ok) {
@@ -177,9 +223,11 @@ export default function EmployeePortal({ onBack }: Props) {
         // Reset conversationPhase so the next setConversationPhase("speaking")
         // is seen as a change by React and re-triggers VoiceConversation's TTS effect
         setConversationPhase("idle");
+        emptyEndCountRef.current = 0;
         // Longer delay gives browser time to release audio resources after TTS
         setTimeout(() => {
           voiceInputRef.current?.startListening();
+          startWatchdog();
         }, 800);
       } else {
         // All fields filled — close overlay
@@ -203,7 +251,7 @@ export default function EmployeePortal({ onBack }: Props) {
     setTimeout(() => {
       voiceInputRef.current?.startListening();
     }, 300);
-  }, [voiceMode, overlayActive, result?.is_valid]);
+  }, [voiceMode, overlayActive, result?.is_valid, startWatchdog]);
 
   const handleVoiceStop = useCallback(() => {
     setVoiceMode(false);
@@ -212,6 +260,10 @@ export default function EmployeePortal({ onBack }: Props) {
     setOverlayActive(false);
     setInterimTranscript("");
     pendingFollowUpRef.current = false;
+    if (watchdogTimerRef.current) {
+      clearTimeout(watchdogTimerRef.current);
+      watchdogTimerRef.current = null;
+    }
     voiceInputRef.current?.stopListening();
   }, []);
 
@@ -237,7 +289,7 @@ export default function EmployeePortal({ onBack }: Props) {
         unit_of_measure: data.unit_of_measure || null,
         category_l1: data.category_l1 || null,
         category_l2: data.category_l2 || null,
-        delivery_address: data.delivery_address || null,
+        delivery_country: data.delivery_country || null,
         required_by_date: data.required_by_date || null,
         preferred_supplier: data.preferred_supplier || null,
         language: data.language || "en",
@@ -268,7 +320,7 @@ export default function EmployeePortal({ onBack }: Props) {
           unit_of_measure: (c.unit_of_measure as string) || data.unit_of_measure,
           category_l1: (c.category_l1 as string) || data.category_l1,
           category_l2: (c.category_l2 as string) || data.category_l2,
-          delivery_address: (c.delivery_address as string) || data.delivery_address,
+          delivery_country: (c.delivery_country as string) || data.delivery_country,
           required_by_date: ((c.required_by_date as string) || data.required_by_date || "").split("T")[0],
           preferred_supplier: (c.preferred_supplier as string) || data.preferred_supplier,
           language: data.language,
@@ -311,7 +363,7 @@ export default function EmployeePortal({ onBack }: Props) {
           unit_of_measure: enriched.unit_of_measure || formData.unit_of_measure || null,
           category_l1: enriched.category_l1 || null,
           category_l2: enriched.category_l2 || null,
-          delivery_address: enriched.delivery_address || formData.delivery_address || null,
+          delivery_country: enriched.delivery_country || formData.delivery_country || null,
           required_by_date: enriched.required_by_date || formData.required_by_date || null,
           preferred_supplier: enriched.preferred_supplier || formData.preferred_supplier || null,
           language: formData.language || "en",
@@ -365,8 +417,6 @@ export default function EmployeePortal({ onBack }: Props) {
     setConversationPhase("idle");
     setOverlayActive(false);
     setInterimTranscript("");
-    deliveryAddressPhaseRef.current = "not_asked";
-    vagueAddressCityRef.current = null;
   }
 
   function getAutoDetectedFields(): string[] {
@@ -533,6 +583,8 @@ export default function EmployeePortal({ onBack }: Props) {
               overlayActive={overlayActive}
               onRegisterForceTranscript={(fn) => { forceTranscriptRef.current = fn; }}
               onMissingFieldsDetected={handleMissingFieldsFromOverlay}
+              onListeningChange={handleListeningChange}
+              onEmptyEnd={handleEmptyEnd}
             />
           </>
         )}

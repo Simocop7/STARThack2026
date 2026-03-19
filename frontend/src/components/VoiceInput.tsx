@@ -44,6 +44,10 @@ interface Props {
   onInterimChange?: (text: string) => void;
   /** Auto-stop after silence once user has spoken (for one-shot overlay mode) */
   autoStopOnSilence?: boolean;
+  /** Called when actual listening state changes (true = mic active, false = mic stopped) */
+  onListeningChange?: (listening: boolean) => void;
+  /** Called when recognition ends with no transcript (e.g. no-speech timeout) — parent can restart */
+  onEmptyEnd?: () => void;
 }
 
 export interface VoiceInputHandle {
@@ -53,7 +57,7 @@ export interface VoiceInputHandle {
 }
 
 const VoiceInput = forwardRef<VoiceInputHandle, Props>(
-  ({ language, onTranscript, onParsing, disabled, hidden, onInterimChange, autoStopOnSilence }, ref) => {
+  ({ language, onTranscript, onParsing, disabled, hidden, onInterimChange, autoStopOnSilence, onListeningChange, onEmptyEnd }, ref) => {
     const [listening, setListening] = useState(false);
     const [interim, setInterim] = useState("");
     const [supported, setSupported] = useState(true);
@@ -96,8 +100,9 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
         }
       }
       setListening(false);
+      onListeningChange?.(false);
       setInterim("");
-    }, [onTranscript]);
+    }, [onTranscript, onListeningChange]);
 
     const startListening = useCallback((retryCount = 0) => {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -171,12 +176,12 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
 
         // Auto-stop after silence: when we get a final result, start a timer.
         // If new speech arrives, the timer resets. If silence persists, stop.
+        // NOTE: Do NOT null recognitionRef here — let onend handle cleanup.
         if (autoStopOnSilence && finalTranscriptRef.current.trim()) {
           if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
           silenceTimerRef.current = setTimeout(() => {
             if (recognitionRef.current) {
               recognitionRef.current.stop();
-              recognitionRef.current = null;
             }
           }, 1500);
         }
@@ -217,11 +222,16 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
         recognitionRef.current = null;
 
         setListening(false);
+        onListeningChange?.(false);
         // Use final transcript, but fall back to interim if no final result arrived
         const transcript = finalTranscriptRef.current.trim() || lastSeenTranscript.trim();
         setInterim("");
         if (transcript) {
           onTranscript(transcript);
+        } else {
+          // No transcript captured (e.g. no-speech, background noise, mic cut off)
+          // Notify parent so it can decide whether to restart listening
+          onEmptyEnd?.();
         }
       };
 
@@ -237,14 +247,15 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
         return;
       }
       setListening(true);
+      onListeningChange?.(true);
 
       // Overlay mode: add safety-net timers that don't depend on isFinal
       if (autoStopOnSilence) {
         // Max duration: force-stop after 15s no matter what
+        // NOTE: Do NOT null recognitionRef here — let onend handle cleanup.
         maxDurationTimerRef.current = setTimeout(() => {
           if (recognitionRef.current) {
             recognitionRef.current.stop();
-            recognitionRef.current = null;
           }
         }, 15000);
 
@@ -257,11 +268,10 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
           const elapsed = Date.now() - lastTranscriptChangeRef.current;
           if (elapsed > 3000 && recognitionRef.current) {
             recognitionRef.current.stop();
-            recognitionRef.current = null;
           }
         }, 500);
       }
-    }, [language, onTranscript, onInterimChange, stopListening, autoStopOnSilence]);
+    }, [language, onTranscript, onInterimChange, stopListening, autoStopOnSilence, onListeningChange, onEmptyEnd]);
 
     const toggleListening = useCallback(() => {
       if (listening) {

@@ -103,11 +103,6 @@ export default function EmployeeReviewStep({
           autoLabel={i.reviewAutoDetected}
         />
         <Row
-          label={i.reviewDelivery}
-          value={e.delivery_address}
-          autoLabel={i.reviewAutoDetected}
-        />
-        <Row
           label={i.reviewDeliveryCountry}
           value={e.delivery_country}
           isAutoDetected={isAuto("delivery_country")}

@@ -8,8 +8,7 @@ _REQUIRED_FIELDS = {
     "quantity": "Quantity (number of items/units)",
     "category_l1": "Category L1 (auto-detected from your description)",
     "category_l2": "Category L2 (auto-detected from your description)",
-    "delivery_address": "Delivery address",
-    "delivery_country": "Delivery country (could not determine country from address)",
+    "delivery_country": "Delivery country (ISO code, e.g. DE, CH, US)",
     "required_by_date": "Required-by date",
 }
 

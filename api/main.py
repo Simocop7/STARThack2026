@@ -51,6 +51,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Smart Procurement Validator", version="0.1.0", lifespan=lifespan)
 
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch-all handler so judges never see a raw Python traceback."""
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An unexpected error occurred. Please try again."},
+    )
+
 # ---------------------------------------------------------------------------
 # Simple in-memory rate limiter (no extra dependency)
 # ---------------------------------------------------------------------------
@@ -152,8 +162,15 @@ async def health() -> dict:
     response_model=ValidationResult,
     dependencies=[Depends(verify_api_key)],
 )
-async def validate_request(form: FormInput) -> ValidationResult:
-    return await process_request(form)
+async def validate_request(form: FormInput) -> ValidationResult | JSONResponse:
+    try:
+        return await process_request(form)
+    except Exception:
+        logger.exception("Validation pipeline failed")
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Our AI service is temporarily unavailable. Please try again in a moment."},
+        )
 
 
 @app.get("/api/categories")
@@ -194,7 +211,6 @@ _SUPPORTED_LANGUAGES = {"en", "fr", "de", "es", "pt", "it", "ja"}
 class VoiceInput(BaseModel):
     transcript: str = Field(..., min_length=1, max_length=5000)
     language: str = "en"
-    delivery_address_context: str | None = None  # "confirming" | "needs_exact" | None
 
     @field_validator("language")
     @classmethod
@@ -205,26 +221,30 @@ class VoiceInput(BaseModel):
 
 
 @app.post("/api/parse-voice", dependencies=[Depends(verify_api_key)])
-async def parse_voice(voice: VoiceInput) -> dict:
+async def parse_voice(voice: VoiceInput) -> dict | JSONResponse:
     """Parse a voice transcript into structured procurement form fields."""
     from datetime import date as date_mod
 
-    today = date_mod.today().isoformat()
-    result = await parse_voice_transcript(
-        voice.transcript,
-        voice.language,
-        today,
-        delivery_address_context=voice.delivery_address_context,
-    )
-    return result
+    try:
+        today = date_mod.today().isoformat()
+        result = await parse_voice_transcript(
+            voice.transcript,
+            voice.language,
+            today,
+        )
+        return result
+    except Exception:
+        logger.exception("Voice parsing failed")
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Voice parsing service is temporarily unavailable. Please try again."},
+        )
 
 
 class FollowUpRequest(BaseModel):
     missing_fields: list[str] = Field(..., min_length=1, max_length=10)
     language: str = "en"
     is_first_round: bool = False
-    delivery_address_phase: str | None = None  # "confirming" | "needs_exact" | None
-    delivery_address_city: str | None = None  # City/country the user mentioned (for "needs_exact")
 
     @field_validator("language")
     @classmethod
@@ -241,6 +261,7 @@ def _natural_field_question(fields: list[str]) -> str:
         "delivery date": "when you need it by",
         "required_by_date": "when you need it by",
         "unit_of_measure": "the unit of measure",
+        "delivery_country": "which country you need delivery to",
     }
     parts = [mapping.get(f, f) for f in fields]
     if len(parts) == 1:
@@ -251,69 +272,50 @@ def _natural_field_question(fields: list[str]) -> str:
 @app.post("/api/generate-followup", dependencies=[Depends(verify_api_key)])
 async def generate_followup(req: FollowUpRequest) -> dict:
     """Generate a natural follow-up question asking for missing procurement fields."""
-    from api.azure_client import get_azure_client
+    try:
+        from api.azure_client import get_azure_client
 
-    client = get_azure_client()
-    deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
+        client = get_azure_client()
+        deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
 
-    # Handle delivery address phases with specific prompts (no LLM call needed)
-    if req.delivery_address_phase == "confirming":
-        # Filter out delivery_location from missing fields for the LLM prompt
-        other_missing = [f for f in req.missing_fields if f != "delivery_location"]
-        other_str = ", ".join(other_missing) if other_missing else ""
+        fields_str = ", ".join(req.missing_fields)
 
-        if req.is_first_round and other_str:
-            text = f"Got it! Should I send this to the usual location, or would you prefer somewhere else? Also, {_natural_field_question(other_missing)}"
-        elif req.is_first_round:
-            text = "Got it! Should I send this to the usual location, or would you prefer somewhere else?"
-        elif other_str:
-            text = f"Should I send this to the usual location, or somewhere else? I also still need {_natural_field_question(other_missing)}."
+        if req.is_first_round:
+            system_prompt = (
+                "You are Silvio, a friendly procurement assistant speaking to an employee via voice. "
+                "The employee just told you what they need. You understood their request and you're happy to help. "
+                "Start with a brief, warm acknowledgment (e.g. 'Got it!' or 'Sure thing!'), "
+                "then ask for the missing details in a natural, conversational way. "
+                "Be concise (2 sentences max). Speak in English. "
+                "Do NOT list field names technically — use natural language. "
+                "Examples: 'How many do you need?' instead of 'Please provide quantity'. "
+                "'When do you need this by?' instead of 'Please provide required_by_date'."
+            )
         else:
-            text = "Should I send this to the usual location, or would you prefer somewhere else?"
-        return {"text": text}
+            system_prompt = (
+                "You are Silvio, a friendly procurement assistant speaking to an employee via voice. "
+                "You already greeted the employee. Now you still need a few more details. "
+                "Generate a short, natural sentence asking for the missing information. "
+                "Be concise (1-2 sentences max). Speak in English. "
+                "Do NOT list field names technically — use natural language."
+            )
 
-    if req.delivery_address_phase == "needs_exact":
-        city = req.delivery_address_city or "that location"
-        other_missing = [f for f in req.missing_fields if f != "delivery_location"]
-        if other_missing:
-            text = f"I got {city}. Could you give me a more precise address, like a street and building? I also still need {_natural_field_question(other_missing)}."
-        else:
-            text = f"I got {city}. Could you give me a more precise address, like a street and building?"
-        return {"text": text}
-
-    fields_str = ", ".join(req.missing_fields)
-
-    if req.is_first_round:
-        system_prompt = (
-            "You are Silvio, a friendly procurement assistant speaking to an employee via voice. "
-            "The employee just told you what they need. You understood their request and you're happy to help. "
-            "Start with a brief, warm acknowledgment (e.g. 'Got it!' or 'Sure thing!'), "
-            "then ask for the missing details in a natural, conversational way. "
-            "Be concise (2 sentences max). Speak in English. "
-            "Do NOT list field names technically — use natural language. "
-            "Examples: 'How many do you need?' instead of 'Please provide quantity'. "
-            "'When do you need this by?' instead of 'Please provide required_by_date'."
-        )
-    else:
-        system_prompt = (
-            "You are Silvio, a friendly procurement assistant speaking to an employee via voice. "
-            "You already greeted the employee. Now you still need a few more details. "
-            "Generate a short, natural sentence asking for the missing information. "
-            "Be concise (1-2 sentences max). Speak in English. "
-            "Do NOT list field names technically — use natural language."
+        response = await client.chat.completions.create(
+            model=deployment,
+            max_tokens=150,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Missing fields: {fields_str}"},
+            ],
         )
 
-    response = await client.chat.completions.create(
-        model=deployment,
-        max_tokens=150,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Missing fields: {fields_str}"},
-        ],
-    )
-
-    text = response.choices[0].message.content or "Could you provide a few more details?"
-    return {"text": text.strip()}
+        text = response.choices[0].message.content or "Could you provide a few more details?"
+        return {"text": text.strip()}
+    except Exception:
+        logger.exception("Follow-up generation failed")
+        # Hardcoded fallback so voice flow never breaks
+        fallback = _natural_field_question(req.missing_fields)
+        return {"text": f"Got it! Could you also tell me {fallback}?"}
 
 
 class TTSInput(BaseModel):
@@ -418,7 +420,7 @@ class EmployeeFormInput(BaseModel):
     unit_of_measure: str | None = None
     category_l1: str | None = None
     category_l2: str | None = None
-    delivery_address: str | None = None
+    delivery_country: str | None = None
     required_by_date: str | None = None
     preferred_supplier: str | None = None
     language: str = "en"
@@ -443,7 +445,7 @@ async def submit_employee_request(req: EmployeeFormInput) -> dict:
         "unit_of_measure": req.unit_of_measure or "",
         "category_l1": req.category_l1 or "",
         "category_l2": req.category_l2 or "",
-        "delivery_address": req.delivery_address or "",
+        "delivery_country": req.delivery_country or "",
         "required_by_date": req.required_by_date or "",
         "preferred_supplier": req.preferred_supplier or "",
         "language": req.language,

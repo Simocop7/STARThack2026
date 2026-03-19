@@ -9,50 +9,34 @@
 import { test, expect } from "@playwright/test";
 import { RequestFormPage } from "../pages/RequestFormPage";
 import { ValidationViewPage } from "../pages/ValidationViewPage";
-import { CATEGORIES_RESPONSE, VALID_VALIDATION_RESULT } from "../fixtures/api-responses";
+import {
+  CATEGORIES_RESPONSE,
+  VALID_VALIDATION_RESULT,
+} from "../fixtures/api-responses";
+import { mockReadOnlyEndpoints } from "../fixtures/test-fixtures";
 
-// ---------------------------------------------------------------------------
-// Helpers shared within this file
-// ---------------------------------------------------------------------------
-
-async function setupBasicMocks(page: import("@playwright/test").Page) {
-  await page.route("**/api/health", (r) =>
-    r.fulfill({ json: { status: "ok" } })
-  );
-  await page.route("**/api/categories", (r) =>
-    r.fulfill({ json: CATEGORIES_RESPONSE })
-  );
-  await page.route("**/api/requests", (r) =>
-    r.fulfill({ json: { requests: [] } })
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+// ── Tests ─────────────────────────────────────────────────────────────────
 
 test.describe("Empty form submission", () => {
-  test("submitting without request_text does not show ValidationView", async ({
+  test("submitting without request_text does not show review step", async ({
     page,
   }) => {
-    await setupBasicMocks(page);
+    await mockReadOnlyEndpoints(page);
 
     const formPage = new RequestFormPage(page);
     await formPage.goto();
 
-    // Click submit without filling anything
+    // Click submit without filling anything — HTML5 required fires
     await formPage.submit();
 
-    // HTML5 required validation fires — the browser prevents the fetch.
-    // The validation view back button must not appear.
     const validationPage = new ValidationViewPage(page);
-    await expect(validationPage.backButton).not.toBeVisible();
+    await expect(validationPage.reviewHeading).not.toBeVisible();
   });
 
   test("form remains visible after a failed required-field attempt", async ({
     page,
   }) => {
-    await setupBasicMocks(page);
+    await mockReadOnlyEndpoints(page);
 
     const formPage = new RequestFormPage(page);
     await formPage.goto();
@@ -66,7 +50,7 @@ test.describe("API error handling", () => {
   test("network error on /api/validate does not crash the UI", async ({
     page,
   }) => {
-    await setupBasicMocks(page);
+    await mockReadOnlyEndpoints(page);
     await page.route("**/api/validate", (route) => route.abort("failed"));
 
     const formPage = new RequestFormPage(page);
@@ -81,20 +65,20 @@ test.describe("API error handling", () => {
     });
     await formPage.submit();
 
-    // The catch block in App.tsx sets result to null, keeping the form visible.
-    // After the error resolves, the spinner disappears and the form returns.
-    await expect(page.getByText("Analyzing your request...")).not.toBeVisible({
-      timeout: 8_000,
-    });
-    // ValidationView must not be visible — the back button is the sentinel
+    // Spinner should disappear after network error
+    await expect(
+      page.getByText(/Analyzing your request/i)
+    ).not.toBeVisible({ timeout: 8_000 });
+
+    // Review step must NOT be visible — review heading is the sentinel
     const validationPage = new ValidationViewPage(page);
-    await expect(validationPage.backButton).not.toBeVisible();
+    await expect(validationPage.reviewHeading).not.toBeVisible();
   });
 
   test("500 response from /api/validate does not crash the UI", async ({
     page,
   }) => {
-    await setupBasicMocks(page);
+    await mockReadOnlyEndpoints(page);
     await page.route("**/api/validate", (route) =>
       route.fulfill({ status: 500, body: "Internal Server Error" })
     );
@@ -111,10 +95,10 @@ test.describe("API error handling", () => {
     });
     await formPage.submit();
 
-    // Form should recover silently (no crash, no broken UI)
-    await expect(page.getByText("Analyzing your request...")).not.toBeVisible({
-      timeout: 8_000,
-    });
+    // Form should recover silently
+    await expect(
+      page.getByText(/Analyzing your request/i)
+    ).not.toBeVisible({ timeout: 8_000 });
   });
 
   test("categories API failure renders an empty L1 select without crashing", async ({
@@ -123,16 +107,18 @@ test.describe("API error handling", () => {
     await page.route("**/api/health", (r) =>
       r.fulfill({ json: { status: "ok" } })
     );
-    // Simulate categories endpoint being unavailable
     await page.route("**/api/categories", (route) => route.abort("failed"));
     await page.route("**/api/requests", (r) =>
+      r.fulfill({ json: { requests: [] } })
+    );
+    await page.route("**/api/employee/requests", (r) =>
       r.fulfill({ json: { requests: [] } })
     );
 
     const formPage = new RequestFormPage(page);
     await formPage.goto();
 
-    // The form should still render — empty categories just means no options
+    // Form should still render — empty categories just means no options
     await expect(formPage.submitButton).toBeVisible();
     await expect(formPage.requestTextArea).toBeVisible();
   });
@@ -146,15 +132,16 @@ test.describe("API error handling", () => {
     await page.route("**/api/categories", (r) =>
       r.fulfill({ json: CATEGORIES_RESPONSE })
     );
-    // Simulate requests endpoint being unavailable
     await page.route("**/api/requests", (route) => route.abort("failed"));
+    await page.route("**/api/employee/requests", (r) =>
+      r.fulfill({ json: { requests: [] } })
+    );
 
     const formPage = new RequestFormPage(page);
     await formPage.goto();
 
-    // Form should render; demo selector is conditionally rendered only when
-    // demoRequests.length > 0, so it should be absent.
     await expect(formPage.submitButton).toBeVisible();
+    // Demo selector is absent when demoRequests.length === 0
     await expect(
       page.getByText("Load a demo request")
     ).not.toBeVisible();
@@ -162,10 +149,10 @@ test.describe("API error handling", () => {
 });
 
 test.describe("Re-submission after viewing results", () => {
-  test("back button restores the form with previously entered data", async ({
+  test("Edit Request button restores the form with previously entered data", async ({
     page,
   }) => {
-    await setupBasicMocks(page);
+    await mockReadOnlyEndpoints(page);
     await page.route("**/api/validate", (r) =>
       r.fulfill({ json: VALID_VALIDATION_RESULT })
     );
@@ -185,6 +172,7 @@ test.describe("Re-submission after viewing results", () => {
     await formPage.submit();
     await validationPage.waitForView();
 
+    // Go back via Edit Request
     await validationPage.goBack();
 
     // App passes initialData back to the form — text should be preserved

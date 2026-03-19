@@ -4,9 +4,15 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import date, timedelta
 from typing import Any
 
 from api.azure_client import get_azure_client
+
+_VALID_COUNTRY_CODES = {
+    "DE", "FR", "NL", "BE", "AT", "IT", "ES", "PL", "UK",
+    "CH", "US", "CA", "BR", "MX", "SG", "AU", "IN", "JP", "UAE", "ZA",
+}
 
 _VOICE_TOOL_SCHEMA = {
     "type": "function",
@@ -18,7 +24,7 @@ _VOICE_TOOL_SCHEMA = {
             "properties": {
                 "request_text": {
                     "type": "string",
-                    "description": "The cleaned-up version of the voice transcript as a procurement request description.",
+                    "description": "A concise procurement request description extracted from the voice transcript. Strip conversational/command language (e.g. 'please order', 'per favore ordina', 'I need you to buy') and keep only the item, quantity, and constraints.",
                 },
                 "quantity": {
                     "type": ["integer", "null"],
@@ -36,17 +42,9 @@ _VOICE_TOOL_SCHEMA = {
                     "type": ["string", "null"],
                     "description": "Supplier name if mentioned in the transcript.",
                 },
-                "delivery_address": {
+                "delivery_country": {
                     "type": ["string", "null"],
-                    "description": "Delivery address or location if mentioned in the transcript. Can be a full address, city, or country.",
-                },
-                "delivery_address_confirmed": {
-                    "type": ["boolean", "null"],
-                    "description": "True if the user confirmed they want delivery to the current/default location (e.g. said 'yes', 'ok', 'sì', 'ja', 'oui'). Null otherwise.",
-                },
-                "address_is_vague": {
-                    "type": ["boolean", "null"],
-                    "description": "True if the extracted delivery_address is only a city or country (not a precise street address). False if it includes a street/building. Null if no address provided.",
+                    "description": "ISO country code for delivery (e.g. DE, CH, US, FR). If user says a city name, map to country code. If user says a country name, convert to code. Valid codes: DE, FR, NL, BE, AT, IT, ES, PL, UK, CH, US, CA, BR, MX, SG, AU, IN, JP, UAE, ZA. Null if not mentioned.",
                 },
                 "missing_fields": {
                     "type": "array",
@@ -60,9 +58,7 @@ _VOICE_TOOL_SCHEMA = {
                 "unit_of_measure",
                 "required_by_date",
                 "preferred_supplier",
-                "delivery_address",
-                "delivery_address_confirmed",
-                "address_is_vague",
+                "delivery_country",
                 "missing_fields",
             ],
         },
@@ -74,7 +70,6 @@ async def parse_voice_transcript(
     transcript: str,
     language: str,
     today: str,
-    delivery_address_context: str | None = None,
 ) -> dict[str, Any]:
     """Use LLM to extract structured form fields from a voice transcript.
 
@@ -82,34 +77,9 @@ async def parse_voice_transcript(
         transcript: The raw speech-to-text output.
         language: UI language code (e.g. "en", "de", "fr").
         today: Today's date as ISO string for relative date resolution.
-        delivery_address_context: Optional context about the delivery address
-            conversation phase ("confirming" or "needs_exact").  When set the
-            user is answering a follow-up question about delivery location.
     """
     client = get_azure_client()
     deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
-
-    # Build additional instructions for delivery-address follow-up rounds
-    address_instructions = ""
-    if delivery_address_context == "confirming":
-        address_instructions = """
-
-DELIVERY ADDRESS CONTEXT:
-The user is answering a question about whether they want delivery to the current/default location or somewhere else.
-- If they say yes/ok/sure/sì/ja/oui/d'accord/genau or any affirmative → set delivery_address_confirmed=true, delivery_address=null, address_is_vague=null
-- If they say no and provide a location → set delivery_address to that location, delivery_address_confirmed=null
-- If they provide a location, determine if it's precise (has street/building) → address_is_vague=false, or vague (just city/country) → address_is_vague=true
-- Other fields (quantity, required_by_date, etc.) may already be filled — only extract them if the user mentions new values."""
-    elif delivery_address_context == "needs_exact":
-        address_instructions = """
-
-DELIVERY ADDRESS CONTEXT:
-The user was asked to provide a more precise delivery address (street + building). They previously gave only a city or country.
-- Extract the delivery address from their response. It should now include a street/building.
-- If they provide a precise address → address_is_vague=false
-- If it's still just a city/country → address_is_vague=true
-- delivery_address_confirmed should be null in this context.
-- Other fields (quantity, required_by_date, etc.) may already be filled — only extract them if the user mentions new values."""
 
     system_prompt = f"""You are a procurement assistant that extracts structured form fields from voice transcripts.
 
@@ -122,23 +92,21 @@ The user has spoken a procurement request using voice input. The transcript may 
 Today's date is: {today}
 
 Your job:
-1. Clean up the transcript into a proper procurement request description (correct obvious speech-to-text errors)
+1. Clean up the transcript into a concise procurement request description: correct obvious speech-to-text errors AND strip away conversational/command language (e.g. "per favore ordina", "please order", "I would like to buy", "bitte bestelle") — keep only the actual item description, quantity, and constraints
 2. Extract quantity, unit of measure, deadline, and preferred supplier
-3. If the user mentions a delivery location, address, city, or country, extract it as delivery_address
+3. If the user mentions a delivery country, city, or location, extract the ISO country code as delivery_country. Map city names to country codes (e.g. "Berlin" → "DE", "Zurich" → "CH", "Tokyo" → "JP", "New York" → "US"). Valid codes: DE, FR, NL, BE, AT, IT, ES, PL, UK, CH, US, CA, BR, MX, SG, AU, IN, JP, UAE, ZA
 4. Convert relative dates to absolute ISO dates (YYYY-MM-DD) based on today's date
 5. List any important fields that are missing and should be filled manually by the user
 
 IMPORTANT:
 - Fix obvious speech recognition errors (e.g. "lampadaijne" → "lampadine", "filips" → "Philips")
-- The request_text should be a clean, well-formed version of what the user meant to say
+- The request_text should be a concise procurement description (e.g. "per favore ordina due penne" → "2 penne", "please order 50 laptops for the Berlin office" → "50 laptops for Berlin office"). Remove pleasantries, commands, and filler words.
 - If the user mentions a brand/supplier, extract it as preferred_supplier
-- If the user mentions a delivery location/address/city/country, extract it as delivery_address. If not mentioned, set to null.
-- If delivery_address is extracted, set address_is_vague=true if it's only a city or country, address_is_vague=false if it includes a street/building
-- delivery_address_confirmed should be null unless the user is explicitly confirming the default location
+- If the user mentions a delivery location (country, city, or region), convert it to an ISO country code and set delivery_country. If not mentioned, set to null.
 - For countable items (e.g. laptops, lightbulbs, chairs, licenses), the unit_of_measure is obvious ("unit", "device", etc.) — you can auto-fill it or leave it null; do NOT add it to missing_fields.
 - For items measured by weight, volume, length, or time (e.g. flour, cable, consulting hours), unit_of_measure is critical. If the user did not specify it, set unit_of_measure to null and ADD "unit_of_measure" to missing_fields.
 - If quantity is not mentioned, set it to null
-- missing_fields should only include: "quantity", "required_by_date", "unit_of_measure" (when applicable). Do NOT include "budget" — budget is calculated by the system, not provided by the user.{address_instructions}"""
+- missing_fields should only include: "quantity", "required_by_date", "unit_of_measure" (when applicable). Do NOT include "budget" — budget is calculated by the system, not provided by the user."""
 
     response = await client.chat.completions.create(
         model=deployment,
@@ -160,4 +128,41 @@ IMPORTANT:
     except (json.JSONDecodeError, IndexError, AttributeError) as exc:
         raise RuntimeError("LLM returned unparseable response for voice parsing") from exc
 
+    # ── Post-LLM validation: sanitize output before returning ──
+    missing = result.get("missing_fields", [])
+
+    # Validate delivery_country
+    dc = result.get("delivery_country")
+    if dc and str(dc).upper().strip() not in _VALID_COUNTRY_CODES:
+        result["delivery_country"] = None
+
+    # Validate quantity is a positive integer
+    qty = result.get("quantity")
+    if qty is not None:
+        try:
+            qty = int(qty)
+            if qty < 1:
+                result["quantity"] = None
+                if "quantity" not in missing:
+                    missing.append("quantity")
+        except (ValueError, TypeError):
+            result["quantity"] = None
+            if "quantity" not in missing:
+                missing.append("quantity")
+
+    # Validate required_by_date is not in the past
+    rbd = result.get("required_by_date")
+    if rbd:
+        try:
+            parsed_date = date.fromisoformat(str(rbd))
+            if parsed_date < date.today():
+                result["required_by_date"] = None
+                if "required_by_date" not in missing:
+                    missing.append("required_by_date")
+        except (ValueError, TypeError):
+            result["required_by_date"] = None
+            if "required_by_date" not in missing:
+                missing.append("required_by_date")
+
+    result["missing_fields"] = missing
     return result

@@ -41,7 +41,7 @@ export default function PendingRequestsView({ onProcess, onRefuse, onNewManual }
       unit_of_measure: req.unit_of_measure,
       category_l1: req.category_l1,
       category_l2: req.category_l2,
-      delivery_address: req.delivery_address,
+      delivery_country: req.delivery_country,
       required_by_date: req.required_by_date,
       preferred_supplier: req.preferred_supplier,
       language: req.language || "en",
@@ -145,12 +145,12 @@ export default function PendingRequestsView({ onProcess, onRefuse, onNewManual }
                       {req.unit_of_measure || "units"}
                     </span>
                   )}
-                  {req.delivery_address && (
+                  {req.delivery_country && (
                     <span>
                       <svg className="w-3 h-3 inline mr-0.5 -mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                       </svg>
-                      {req.delivery_address}
+                      {req.delivery_country}
                     </span>
                   )}
                   {req.required_by_date && (

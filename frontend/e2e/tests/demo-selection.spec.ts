@@ -18,7 +18,6 @@ test.describe("Demo request selection", () => {
     const demoSelect = formPage.demoSelect;
     await expect(demoSelect).toBeVisible();
 
-    // Verify each mocked request appears as an option
     for (const req of REQUESTS_RESPONSE.requests) {
       await expect(
         formPage.page.locator(`option[value="${req.request_id}"]`)
@@ -26,33 +25,47 @@ test.describe("Demo request selection", () => {
     }
   });
 
-  test("selecting a demo request auto-fills the form fields", async ({
+  test("selecting a demo request auto-fills the request text", async ({
     formPage,
   }) => {
     await formPage.goto();
-
     await formPage.selectDemoRequest("REQ-000001");
 
     const expectedRequest = SINGLE_REQUEST_RESPONSE.request;
-
-    // Request text should contain the mocked request text
     await expect(formPage.requestTextArea).toHaveValue(
       expectedRequest.request_text
     );
+  });
 
-    // Quantity should be pre-filled
+  test("selecting a demo request auto-fills quantity", async ({ formPage }) => {
+    await formPage.goto();
+    await formPage.selectDemoRequest("REQ-000001");
+
+    const expectedRequest = SINGLE_REQUEST_RESPONSE.request;
     await expect(formPage.quantityInput).toHaveValue(
       String(expectedRequest.quantity)
     );
+  });
 
-    // Delivery country should match first entry in delivery_countries
-    await expect(formPage.deliveryCountrySelect).toHaveValue(
-      expectedRequest.delivery_countries[0]
-    );
+  test("selecting a demo request fills the delivery country select", async ({
+    formPage,
+  }) => {
+    await formPage.goto();
+    await formPage.selectDemoRequest("REQ-000001");
 
-    // Preferred supplier should be set
+    // The component maps delivery_countries[0] → delivery_country select value
+    const expectedCountry = SINGLE_REQUEST_RESPONSE.request.delivery_countries[0];
+    await expect(formPage.deliveryCountrySelect).toHaveValue(expectedCountry);
+  });
+
+  test("selecting a demo request fills the preferred supplier field", async ({
+    formPage,
+  }) => {
+    await formPage.goto();
+    await formPage.selectDemoRequest("REQ-000001");
+
     await expect(formPage.preferredSupplierInput).toHaveValue(
-      expectedRequest.preferred_supplier_mentioned
+      SINGLE_REQUEST_RESPONSE.request.preferred_supplier_mentioned
     );
   });
 
@@ -73,7 +86,6 @@ test.describe("Demo request selection", () => {
     await formPage.goto();
     await formPage.selectDemoRequest("REQ-000001");
 
-    // The component strips the time component (split("T")[0])
     const expectedDate =
       SINGLE_REQUEST_RESPONSE.request.required_by_date.split("T")[0];
     await expect(formPage.requiredByDateInput).toHaveValue(expectedDate);
@@ -84,15 +96,10 @@ test.describe("Demo request selection", () => {
   }) => {
     await formPage.goto();
 
-    // The 404 route is mocked in the fixture — the form should silently ignore it
-    // and remain visible with empty fields
-    // We bypass the select by directly calling the fetch via console evaluation
-    await formPage.page.evaluate(() => {
-      // Simulate the component calling loadDemo with an unknown id
-      return fetch("/api/requests/REQ-UNKNOWN").then((r) => r.json());
-    });
+    await formPage.page.evaluate(() =>
+      fetch("/api/requests/REQ-UNKNOWN").then((r) => r.json())
+    );
 
-    // Form should still be rendered and not crash
     await expect(formPage.submitButton).toBeVisible();
   });
 
@@ -101,7 +108,7 @@ test.describe("Demo request selection", () => {
   }) => {
     await formPage.goto();
 
-    // REQ-000002 has scenario tags [multilingual, restricted]
+    // REQ-000002 has scenario_tags: ["multilingual", "restricted"]
     const optionText = await formPage.page
       .locator('option[value="REQ-000002"]')
       .textContent();

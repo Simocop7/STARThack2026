@@ -1,8 +1,14 @@
 /**
  * Form submission flow.
  *
- * Tests the full path: user fills the form → submits → loading spinner appears
- * → ValidationView renders.
+ * Tests the full path: user fills the form → submits → loading spinner
+ * appears → result is shown.
+ *
+ * Employee portal behaviour on valid result:
+ *   → EmployeeReviewStep ("Review Your Request" heading + "Confirm & Submit" button)
+ *
+ * Employee portal behaviour on invalid result:
+ *   → ValidationBanner (inline, "N issues to resolve" h2) above the form
  *
  * /api/validate is mocked in each test so that no real LLM calls are made.
  */
@@ -14,6 +20,7 @@ import {
 import {
   submitFormWithMockedResult,
   submitValidForm,
+  mockReadOnlyEndpoints,
 } from "../fixtures/test-fixtures";
 import { ValidationViewPage } from "../pages/ValidationViewPage";
 import { RequestFormPage } from "../pages/RequestFormPage";
@@ -22,34 +29,15 @@ test.describe("Form submission", () => {
   test("loading spinner is shown while the API call is in flight", async ({
     page,
   }) => {
-    // Mock validate with an artificial delay so we can catch the spinner
     let resolveValidate!: (value: unknown) => void;
     const validatePromise = new Promise((resolve) => {
       resolveValidate = resolve;
     });
 
-    // Set up read-only mocks first
-    await page.route("**/api/health", (r) =>
-      r.fulfill({ json: { status: "ok" } })
-    );
-    await page.route("**/api/categories", (r) =>
-      r.fulfill({
-        json: {
-          categories: {
-            IT: ["Laptops"],
-            Facilities: [],
-            "Professional Services": [],
-            Marketing: [],
-          },
-        },
-      })
-    );
-    await page.route("**/api/requests", (r) =>
-      r.fulfill({ json: { requests: [] } })
-    );
+    await mockReadOnlyEndpoints(page);
 
     await page.route("**/api/validate", async (route) => {
-      await validatePromise; // hold until we resolve it manually
+      await validatePromise;
       await route.fulfill({ json: VALID_VALIDATION_RESULT });
     });
 
@@ -67,26 +55,32 @@ test.describe("Form submission", () => {
     await formPage.submit();
 
     // Spinner should appear immediately after click
-    await expect(page.getByText("Analyzing your request...")).toBeVisible();
+    await expect(
+      page.getByText(/Analyzing your request/i)
+    ).toBeVisible();
 
     // Release the API mock and verify spinner disappears
     resolveValidate(undefined);
-    await expect(page.getByText("Analyzing your request...")).not.toBeVisible({
-      timeout: 5_000,
-    });
+    await expect(
+      page.getByText(/Analyzing your request/i)
+    ).not.toBeVisible({ timeout: 5_000 });
   });
 
-  test("valid result renders ValidationView after submission", async ({
+  test("valid result renders EmployeeReviewStep after submission", async ({
     page,
   }) => {
     const { validationPage } = await submitValidForm(page);
-    await validationPage.waitForView();
-    await expect(validationPage.backButton).toBeVisible();
+    await expect(validationPage.reviewHeading).toBeVisible();
   });
 
-  test("valid result shows green status banner", async ({ page }) => {
+  test("valid result shows Confirm & Submit button", async ({ page }) => {
     const { validationPage } = await submitValidForm(page);
-    await expect(validationPage.statusBanner).toHaveText(/Request validated/i);
+    await expect(validationPage.confirmSubmitButton).toBeVisible();
+  });
+
+  test("valid result shows Edit Request button", async ({ page }) => {
+    const { validationPage } = await submitValidForm(page);
+    await expect(validationPage.editButton).toBeVisible();
   });
 
   test("invalid result shows red banner with correct blocking count", async ({
@@ -101,26 +95,29 @@ test.describe("Form submission", () => {
     await validationPage.expectInvalid(2);
   });
 
-  test("form is no longer visible after submission", async ({ page }) => {
+  test("form is still visible after invalid result (inline banner)", async ({
+    page,
+  }) => {
+    const { formPage } = await submitFormWithMockedResult(
+      page,
+      INVALID_VALIDATION_RESULT
+    );
+    // In the Employee portal, the form remains visible with validation banner above it
+    await expect(formPage.submitButton).toBeVisible();
+    await expect(formPage.requestTextArea).toBeVisible();
+  });
+
+  test("form is no longer visible after valid result (review step shown)", async ({
+    page,
+  }) => {
     const { formPage } = await submitValidForm(page);
+    // After valid result → EmployeeReviewStep is shown; form is hidden
     await expect(formPage.submitButton).not.toBeVisible();
     await expect(formPage.requestTextArea).not.toBeVisible();
   });
 
   test("API request body contains all form field values", async ({ page }) => {
-    await page.route("**/api/health", (r) =>
-      r.fulfill({ json: { status: "ok" } })
-    );
-    await page.route("**/api/categories", (r) =>
-      r.fulfill({
-        json: {
-          categories: { IT: ["Laptops"], Facilities: [], "Professional Services": [], Marketing: [] },
-        },
-      })
-    );
-    await page.route("**/api/requests", (r) =>
-      r.fulfill({ json: { requests: [] } })
-    );
+    await mockReadOnlyEndpoints(page);
 
     let capturedBody: Record<string, unknown> = {};
     await page.route("**/api/validate", async (route) => {
@@ -151,13 +148,16 @@ test.describe("Form submission", () => {
       category_l2: "Laptops",
       quantity: 10,
       unit_of_measure: "device",
-      delivery_country: "DE",
       required_by_date: "2026-03-31",
       preferred_supplier: "Dell",
     });
+    // delivery_country should be the selected 2-letter code
+    expect(capturedBody.delivery_country ?? capturedBody.delivery_address).toBe("DE");
   });
 
-  test("back button returns to the form", async ({ page }) => {
+  test("Edit Request button returns to the form from review step", async ({
+    page,
+  }) => {
     const { validationPage, formPage } = await submitValidForm(page);
     await validationPage.goBack();
     await expect(formPage.submitButton).toBeVisible();

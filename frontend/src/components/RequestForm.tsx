@@ -36,10 +36,20 @@ interface Props {
   /** Expose a way for parent to force-submit a transcript (bypass VoiceInput) */
   onRegisterForceTranscript?: (fn: (transcript: string) => void) => void;
   /** Called after voice parse with list of still-missing required fields */
-  onMissingFieldsDetected?: (fields: string[], deliveryAddressPhase?: string, vagueAddress?: string | null) => void;
+  onMissingFieldsDetected?: (fields: string[]) => void;
+  /** Called when mic listening state actually changes */
+  onListeningChange?: (listening: boolean) => void;
+  /** Called when recognition ends with no transcript (no-speech, timeout) */
+  onEmptyEnd?: () => void;
 }
 
-const DEFAULT_DELIVERY_ADDRESS = "St. Gallen, Olma Halle 9";
+const VALID_COUNTRY_CODES: Record<string, string> = {
+  DE: "Germany", FR: "France", NL: "Netherlands", BE: "Belgium",
+  AT: "Austria", IT: "Italy", ES: "Spain", PL: "Poland",
+  UK: "United Kingdom", CH: "Switzerland", US: "United States",
+  CA: "Canada", BR: "Brazil", MX: "Mexico", SG: "Singapore",
+  AU: "Australia", IN: "India", JP: "Japan", UAE: "UAE", ZA: "South Africa",
+};
 
 export default function RequestForm({
   onSubmit,
@@ -55,6 +65,8 @@ export default function RequestForm({
   overlayActive,
   onRegisterForceTranscript,
   onMissingFieldsDetected,
+  onListeningChange,
+  onEmptyEnd,
 }: Props) {
   const [form, setForm] = useState<FormData>(
     initialData ?? {
@@ -63,7 +75,7 @@ export default function RequestForm({
       unit_of_measure: "",
       category_l1: "",
       category_l2: "",
-      delivery_address: DEFAULT_DELIVERY_ADDRESS,
+      delivery_country: "",
       required_by_date: "",
       preferred_supplier: "",
       language: "en",
@@ -81,13 +93,6 @@ export default function RequestForm({
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [categoryIndex, setCategoryIndex] = useState<Record<string, string[]>>({});
-
-  // Delivery address conversation phase:
-  // "not_asked" → initial, "confirming" → asked if default is ok,
-  // "needs_exact" → user gave vague address, "done" → resolved
-  const deliveryAddressPhaseRef = useRef<"not_asked" | "confirming" | "needs_exact" | "done">("not_asked");
-  // Store the vague city/country for the "needs_exact" prompt
-  const vagueAddressRef = useRef<string | null>(null);
 
   const internalVoiceRef = useRef<VoiceInputHandle | null>(null);
   const effectiveVoiceRef = voiceInputRef ?? internalVoiceRef;
@@ -149,7 +154,7 @@ export default function RequestForm({
         unit_of_measure: r.unit_of_measure || "",
         category_l1: r.category_l1 || "",
         category_l2: r.category_l2 || "",
-        delivery_address: r.delivery_countries?.[0] || r.country || "",
+        delivery_country: r.delivery_countries?.[0] || r.country || "",
         required_by_date: r.required_by_date?.split("T")[0] || "",
         preferred_supplier: r.preferred_supplier_mentioned || "",
         language: prev.language,
@@ -170,19 +175,12 @@ export default function RequestForm({
     }
 
     try {
-      // Pass delivery address context so the LLM knows what kind of answer to expect
-      const addressCtx =
-        deliveryAddressPhaseRef.current === "confirming" || deliveryAddressPhaseRef.current === "needs_exact"
-          ? deliveryAddressPhaseRef.current
-          : null;
-
       const res = await fetch("/api/parse-voice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           transcript,
           language: form.language,
-          delivery_address_context: addressCtx,
         }),
       });
 
@@ -193,34 +191,9 @@ export default function RequestForm({
 
       const parsed = await res.json();
 
-      // Handle delivery address confirmation/extraction
-      if (parsed.delivery_address_confirmed === true) {
-        // User confirmed default location
-        deliveryAddressPhaseRef.current = "done";
-        vagueAddressRef.current = null;
-      } else if (parsed.delivery_address) {
-        if (parsed.address_is_vague) {
-          // User gave only a city/country — need exact address
-          vagueAddressRef.current = parsed.delivery_address;
-          deliveryAddressPhaseRef.current = "needs_exact";
-        } else {
-          // User gave a precise address
-          deliveryAddressPhaseRef.current = "done";
-          vagueAddressRef.current = null;
-        }
-      }
-
       // Merge parsed fields into form, preserving existing non-empty values
-      // (important for follow-up rounds where user fills in missing fields)
       let updatedForm: FormData = formRef.current;
       setForm((prev) => {
-        const newDeliveryAddress =
-          parsed.delivery_address
-            ? parsed.delivery_address
-            : parsed.delivery_address_confirmed
-              ? prev.delivery_address  // keep default
-              : prev.delivery_address;
-
         const updated = {
           ...prev,
           request_text: prev.request_text || parsed.request_text || transcript,
@@ -228,36 +201,24 @@ export default function RequestForm({
           unit_of_measure: parsed.unit_of_measure || prev.unit_of_measure,
           required_by_date: parsed.required_by_date || prev.required_by_date,
           preferred_supplier: parsed.preferred_supplier || prev.preferred_supplier,
-          delivery_address: newDeliveryAddress || DEFAULT_DELIVERY_ADDRESS,
+          delivery_country: parsed.delivery_country || prev.delivery_country,
         };
         formRef.current = updated;
         updatedForm = updated;
         return updated;
       });
 
-      // Check which required fields are still missing based on actual form state
+      // Check which required fields are still missing
       const stillMissing: string[] = [];
       if (!updatedForm.quantity) stillMissing.push("quantity");
       if (!updatedForm.required_by_date) stillMissing.push("delivery date");
-
-      // Delivery address flow: if not resolved yet, add to missing
-      if (deliveryAddressPhaseRef.current === "not_asked") {
-        deliveryAddressPhaseRef.current = "confirming";
-        stillMissing.push("delivery_location");
-      } else if (deliveryAddressPhaseRef.current === "confirming" && !parsed.delivery_address_confirmed && !parsed.delivery_address) {
-        // User didn't answer the address question clearly — ask again
-        stillMissing.push("delivery_location");
-      } else if (deliveryAddressPhaseRef.current === "needs_exact") {
-        stillMissing.push("delivery_location");
-      }
+      if (!updatedForm.delivery_country) stillMissing.push("delivery_country");
 
       setMissingFields(stillMissing);
 
       if (overlayActive) {
-        // In overlay mode: notify parent about missing fields + delivery address context
-        onMissingFieldsDetected?.(stillMissing, deliveryAddressPhaseRef.current, vagueAddressRef.current);
+        onMissingFieldsDetected?.(stillMissing);
       } else if (voiceMode) {
-        // Non-overlay voice mode: auto-submit regardless
         pendingAutoSubmit.current = true;
       }
     } catch {
@@ -380,6 +341,8 @@ export default function RequestForm({
           hidden
           onInterimChange={onInterimTranscriptChange}
           autoStopOnSilence={overlayActive}
+          onListeningChange={onListeningChange}
+          onEmptyEnd={onEmptyEnd}
         />
         {voiceParsing && !overlayActive && (
           <div className="mt-3 flex items-center gap-2 text-sm text-indigo-700">
@@ -425,14 +388,14 @@ export default function RequestForm({
             {i.categoryL1Optional}
           </label>
           <select
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+            className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white ${!form.category_l1 ? "text-gray-400" : "text-gray-900"}`}
             value={form.category_l1}
             onChange={(e) => {
               update("category_l1", e.target.value);
               update("category_l2", "");
             }}
           >
-            <option value="">{i.categoryOptionalHint}</option>
+            <option value="" className="text-gray-400">{i.categoryOptionalHint}</option>
             {Object.keys(categoryIndex).map((l1) => (
               <option key={l1} value={l1}>{l1}</option>
             ))}
@@ -443,12 +406,12 @@ export default function RequestForm({
             {i.categoryL2Optional}
           </label>
           <select
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+            className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white ${!form.category_l2 ? "text-gray-400" : "text-gray-900"}`}
             value={form.category_l2}
             disabled={!form.category_l1}
             onChange={(e) => update("category_l2", e.target.value)}
           >
-            <option value="">{i.categoryOptionalHint}</option>
+            <option value="" className="text-gray-400">{i.categoryOptionalHint}</option>
             {(categoryIndex[form.category_l1] ?? []).map((l2) => (
               <option key={l2} value={l2}>{l2}</option>
             ))}
@@ -487,20 +450,32 @@ export default function RequestForm({
         </div>
       </div>
 
-      {/* Delivery address + date */}
+      {/* Delivery country + date */}
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            {i.deliveryAddress}
+            {i.deliveryCountry}
           </label>
-          <input
+          <select
             required
-            type="text"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            placeholder={i.deliveryPlaceholder}
-            value={form.delivery_address}
-            onChange={(e) => update("delivery_address", e.target.value)}
-          />
+            className={`w-full border rounded-lg px-3 py-2 text-sm bg-white ${
+              form.delivery_country && !(form.delivery_country in VALID_COUNTRY_CODES)
+                ? "border-red-500 text-red-700"
+                : "border-gray-300"
+            }`}
+            value={form.delivery_country}
+            onChange={(e) => update("delivery_country", e.target.value)}
+          >
+            <option value="">{i.deliveryCountryPlaceholder}</option>
+            {Object.entries(VALID_COUNTRY_CODES).map(([code, name]) => (
+              <option key={code} value={code}>{code} — {name}</option>
+            ))}
+          </select>
+          {form.delivery_country && !(form.delivery_country in VALID_COUNTRY_CODES) && (
+            <p className="mt-1 text-xs text-red-600">
+              Invalid country code. Please select a valid country.
+            </p>
+          )}
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">

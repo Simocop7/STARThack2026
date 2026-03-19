@@ -142,7 +142,7 @@ export interface SubmittedRequest {
   unit_of_measure: string;
   category_l1: string;
   category_l2: string;
-  delivery_address: string;
+  delivery_country: string;
   required_by_date: string;
   preferred_supplier: string;
   language: string;
@@ -156,7 +156,7 @@ export interface FormData {
   unit_of_measure: string;
   category_l1: string;
   category_l2: string;
-  delivery_address: string;
+  delivery_country: string;
   required_by_date: string;
   preferred_supplier: string;
   language: string;
@@ -214,7 +214,6 @@ export interface EnrichedRequest {
   category_l1: string | null;
   category_l2: string | null;
   delivery_country: string | null;
-  delivery_address: string | null;
   required_by_date: string | null;
   preferred_supplier: string | null;
   preferred_supplier_id: string | null;

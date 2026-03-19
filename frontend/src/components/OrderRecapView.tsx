@@ -83,7 +83,7 @@ export default function OrderRecapView({ supplier, ranking, formData, deliveryCo
         <Row label="Category" value={[formData.category_l1, formData.category_l2].filter(Boolean).join(" › ") || "—"} />
         <Row label="Quantity" value={`${(formData.quantity ?? 1).toLocaleString()} ${formData.unit_of_measure || "units"}`} />
         <Row label="Delivery country" value={deliveryCountry} />
-        {formData.delivery_address && <Row label="Delivery address" value={formData.delivery_address} />}
+        {formData.delivery_country && <Row label="Delivery country" value={formData.delivery_country} />}
         {formData.required_by_date && <Row label="Required by" value={formData.required_by_date} />}
         <div className="pb-2" />
       </section>

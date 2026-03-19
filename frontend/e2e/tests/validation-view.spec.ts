@@ -1,9 +1,12 @@
 /**
- * ValidationView rendering tests.
+ * Validation result rendering tests.
  *
- * Exercises every section of the results screen: status banner, IssueCards
- * with severity badges, expandable JSON panels, confirm/accept-fixes buttons,
- * and the fallback raw-issues path (when user_message is null).
+ * Employee portal validation behaviour:
+ *   - Valid result  → EmployeeReviewStep (review heading + confirm/edit buttons)
+ *   - Invalid result → ValidationBanner inline above the form
+ *                      (issue count h2, IssueCards with severity badges)
+ *
+ * Tests here cover both states using the Employee portal flow.
  */
 import { test, expect } from "../fixtures/test-fixtures";
 import {
@@ -16,75 +19,70 @@ import {
   submitValidForm,
 } from "../fixtures/test-fixtures";
 
-test.describe("ValidationView — valid result", () => {
-  test("Confirm Request button is shown for valid results", async ({ page }) => {
-    const { validationPage } = await submitValidForm(page);
-    await expect(validationPage.confirmButton).toBeVisible();
-  });
+// ── Valid result — EmployeeReviewStep ─────────────────────────────────────
 
-  test("Accept All Fixes button is NOT shown for valid results", async ({
+test.describe("Valid result — EmployeeReviewStep", () => {
+  test("Review Your Request heading is shown for valid results", async ({
     page,
   }) => {
     const { validationPage } = await submitValidForm(page);
-    await expect(validationPage.acceptAllFixesButton).not.toBeVisible();
+    await expect(validationPage.reviewHeading).toBeVisible();
   });
 
-  test("user_message summary is displayed in the status banner", async ({
+  test("Confirm & Submit button is visible on valid result", async ({
     page,
   }) => {
     const { validationPage } = await submitValidForm(page);
-    const expectedSummary =
-      VALID_VALIDATION_RESULT.user_message!.summary;
-    await expect(validationPage.page.getByText(expectedSummary)).toBeVisible();
+    await expect(validationPage.confirmSubmitButton).toBeVisible();
   });
 
-  test("IssueCards are rendered for each issue", async ({ page }) => {
+  test("Edit Request button is visible on valid result", async ({ page }) => {
     const { validationPage } = await submitValidForm(page);
-    const issueCount = VALID_VALIDATION_RESULT.user_message!.issues.length;
-    await expect(validationPage.issueCells()).toHaveCount(issueCount);
+    await expect(validationPage.editButton).toBeVisible();
+  });
+
+  test("form fields are hidden while review step is shown", async ({
+    page,
+  }) => {
+    const { formPage } = await submitValidForm(page);
+    await expect(formPage.requestTextArea).not.toBeVisible();
+    await expect(formPage.submitButton).not.toBeVisible();
+  });
+
+  test("Edit Request returns user to the form", async ({ page }) => {
+    const { validationPage, formPage } = await submitValidForm(page);
+    await validationPage.editButton.click();
+    await expect(formPage.requestTextArea).toBeVisible();
+    await expect(formPage.submitButton).toBeVisible();
   });
 });
 
-test.describe("ValidationView — invalid result", () => {
-  test("Confirm Request button is NOT shown for invalid results", async ({
-    page,
-  }) => {
+// ── Invalid result — ValidationBanner ────────────────────────────────────
+
+test.describe("Invalid result — ValidationBanner", () => {
+  test("issue count banner is shown for invalid results", async ({ page }) => {
     const { validationPage } = await submitFormWithMockedResult(
       page,
       INVALID_VALIDATION_RESULT
     );
-    await expect(validationPage.confirmButton).not.toBeVisible();
+    await validationPage.expectInvalid(2);
   });
 
-  test("Accept All Fixes button is shown when all_ok_message is set", async ({
-    page,
-  }) => {
-    const { validationPage } = await submitFormWithMockedResult(
+  test("form is still visible after invalid result", async ({ page }) => {
+    const { formPage } = await submitFormWithMockedResult(
       page,
       INVALID_VALIDATION_RESULT
     );
-    await expect(validationPage.acceptAllFixesButton).toBeVisible();
+    await expect(formPage.requestTextArea).toBeVisible();
+    await expect(formPage.submitButton).toBeVisible();
   });
 
-  test("critical severity badge is rendered with correct label", async ({
-    page,
-  }) => {
+  test("issue titles from LLM user_message are displayed", async ({ page }) => {
     const { validationPage } = await submitFormWithMockedResult(
       page,
       INVALID_VALIDATION_RESULT
     );
 
-    // First issue in INVALID_VALIDATION_RESULT is critical
-    const firstBadge = validationPage.severityBadge(0);
-    await expect(firstBadge).toBeVisible();
-    await expect(firstBadge).toHaveText(/CRITICAL/i);
-  });
-
-  test("issue titles are displayed", async ({ page }) => {
-    const { validationPage } = await submitFormWithMockedResult(
-      page,
-      INVALID_VALIDATION_RESULT
-    );
     for (const issue of INVALID_VALIDATION_RESULT.user_message!.issues) {
       await expect(
         validationPage.page.getByText(issue.title)
@@ -97,6 +95,7 @@ test.describe("ValidationView — invalid result", () => {
       page,
       INVALID_VALIDATION_RESULT
     );
+
     for (const issue of INVALID_VALIDATION_RESULT.user_message!.issues) {
       await expect(
         validationPage.page.getByText(issue.proposed_fix)
@@ -104,36 +103,24 @@ test.describe("ValidationView — invalid result", () => {
     }
   });
 
-  test("fix_field → fix_value code block is shown when both are present", async ({
-    page,
-  }) => {
+  test("user_message summary is displayed in the banner", async ({ page }) => {
     const { validationPage } = await submitFormWithMockedResult(
       page,
       INVALID_VALIDATION_RESULT
     );
-
-    // First issue has fix_field: "budget_amount", fix_value: "12000"
+    const expectedSummary = INVALID_VALIDATION_RESULT.user_message!.summary;
     await expect(
-      validationPage.page.locator("code").filter({ hasText: /budget_amount.*12000/i })
+      validationPage.page.getByText(expectedSummary)
     ).toBeVisible();
   });
 });
 
-test.describe("ValidationView — fallback (no user_message)", () => {
-  test("raw issues section is shown when user_message is null", async ({
+// ── Fallback (no user_message) ─────────────────────────────────────────────
+
+test.describe("Fallback — no user_message", () => {
+  test("raw issue type is displayed when user_message is null", async ({
     page,
   }) => {
-    const { validationPage } = await submitFormWithMockedResult(
-      page,
-      VALIDATION_RESULT_NO_LLM_MESSAGE
-    );
-
-    await expect(
-      validationPage.page.getByText(/Validation Issues/i)
-    ).toBeVisible();
-  });
-
-  test("raw issue type is displayed", async ({ page }) => {
     const { validationPage } = await submitFormWithMockedResult(
       page,
       VALIDATION_RESULT_NO_LLM_MESSAGE
@@ -144,64 +131,15 @@ test.describe("ValidationView — fallback (no user_message)", () => {
       validationPage.page.getByText(issue.type, { exact: false })
     ).toBeVisible();
   });
-});
 
-test.describe("ValidationView — expandable JSON panels", () => {
-  test("Enriched Request JSON is hidden by default", async ({ page }) => {
-    const { validationPage } = await submitValidForm(page);
-
-    // The pre element starts with class 'hidden'
-    const pre = validationPage.page.locator("pre").first();
-    await expect(pre).toBeHidden();
-  });
-
-  test("clicking Enriched Request JSON toggle reveals the JSON", async ({
-    page,
-  }) => {
-    const { validationPage } = await submitValidForm(page);
-    await validationPage.enrichedJsonToggle.click();
-
-    const pre = validationPage.page.locator("pre").first();
-    await expect(pre).toBeVisible();
-  });
-
-  test("Enriched Request JSON panel contains expected keys", async ({
-    page,
-  }) => {
-    const { validationPage } = await submitValidForm(page);
-    const jsonText = await validationPage.expandEnrichedJson();
-    expect(jsonText).toContain("category_l1");
-    expect(jsonText).toContain("quantity");
-    expect(jsonText).toContain("delivery_country");
-  });
-
-  test("Corrected Request JSON panel is not shown for valid results", async ({
-    page,
-  }) => {
-    const { validationPage } = await submitValidForm(page);
-    // corrected_request is null in VALID_VALIDATION_RESULT
-    await expect(validationPage.correctedJsonToggle).not.toBeVisible();
-  });
-
-  test("Corrected Request JSON panel is shown for invalid results with corrections", async ({
+  test("issue count banner is still shown without user_message", async ({
     page,
   }) => {
     const { validationPage } = await submitFormWithMockedResult(
       page,
-      INVALID_VALIDATION_RESULT
+      VALIDATION_RESULT_NO_LLM_MESSAGE
     );
-    await expect(validationPage.correctedJsonToggle).toBeVisible();
-  });
-
-  test("clicking Corrected Request JSON toggle reveals the JSON", async ({
-    page,
-  }) => {
-    const { validationPage } = await submitFormWithMockedResult(
-      page,
-      INVALID_VALIDATION_RESULT
-    );
-    await validationPage.correctedJsonToggle.click();
-    const pre = validationPage.page.locator("pre").nth(1);
-    await expect(pre).toBeVisible();
+    // 1 high-severity issue → "1 issue to resolve"
+    await validationPage.expectInvalid(1);
   });
 });

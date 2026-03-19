@@ -54,7 +54,7 @@ INSTRUCTIONS:
 
 3. CRITICAL: Only detect contradictions when there is a clear, unambiguous conflict. Do NOT flag minor wording differences.
 4. Always reason internally in English regardless of input language.
-5. delivery_country_code: Extract the ISO 3166-1 alpha-2 country code from the delivery_address field. Use the address, city, or country name to determine the correct code (e.g. "Zurich, Switzerland" → "CH", "Berlin" → "DE", "123 Main St, New York" → "US"). Return null if you cannot determine the country.
+5. delivery_country_code: The delivery_country field is already provided as an ISO country code (e.g. "CH", "DE", "US"). If present, validate it. If missing, try to extract from request_text (city/country mentions). Return null if undetermined.
 
 6. AUTO-CATEGORIZATION (CRITICAL):
    You MUST determine the correct category_l1 and category_l2 from the CATEGORY TAXONOMY above based on the request_text.
@@ -82,7 +82,7 @@ _TOOL_SCHEMA = {
                 "item_description": {"type": "string"},
                 "delivery_country_code": {
                     "type": ["string", "null"],
-                    "description": "ISO 3166-1 alpha-2 country code extracted from delivery_address",
+                    "description": "ISO 3166-1 alpha-2 country code for delivery",
                 },
                 "preferred_supplier_id": {"type": ["string", "null"]},
                 "preferred_supplier_name": {"type": ["string", "null"]},
@@ -183,7 +183,7 @@ STRUCTURED FORM FIELDS:
 - category_l2: {form.category_l2 or "NOT PROVIDED"}
 - quantity: {form.quantity or "NOT PROVIDED"}
 - unit_of_measure: {form.unit_of_measure or "NOT PROVIDED"}
-- delivery_address: {form.delivery_address or "NOT PROVIDED"}
+- delivery_country: {form.delivery_country or "NOT PROVIDED"}
 - required_by_date: {form.required_by_date or "NOT PROVIDED"}
 - preferred_supplier: {form.preferred_supplier or "NOT PROVIDED"}
 
@@ -227,8 +227,8 @@ async def interpret_request(
         except (TypeError, ValueError):
             continue  # skip malformed contradiction entries
 
-    # Derive delivery_country from LLM extraction of address
-    delivery_country = tool_result.get("delivery_country_code") or None
+    # Use delivery_country from form input, or fall back to LLM extraction
+    delivery_country = form_input.delivery_country or tool_result.get("delivery_country_code") or None
 
     # Build category suggestion from LLM output
     llm_cat_l1 = tool_result.get("category_l1", "")
@@ -257,6 +257,18 @@ async def interpret_request(
         needs_disambiguation=llm_confidence < 0.85,
     )
 
+    # Validate LLM categories against actual taxonomy
+    valid_l1s = {c["category_l1"] for c in categories}
+    valid_l2_for_l1: dict[str, set[str]] = {}
+    for c in categories:
+        valid_l2_for_l1.setdefault(c["category_l1"], set()).add(c["category_l2"])
+
+    if llm_cat_l1 and llm_cat_l1 not in valid_l1s:
+        llm_cat_l1 = ""
+        llm_cat_l2 = ""
+    elif llm_cat_l1 and llm_cat_l2 and llm_cat_l2 not in valid_l2_for_l1.get(llm_cat_l1, set()):
+        llm_cat_l2 = ""
+
     # Use LLM-assigned category if user didn't provide one, or if LLM overrides
     effective_l1 = form_input.category_l1 or llm_cat_l1
     effective_l2 = form_input.category_l2 or llm_cat_l2
@@ -269,7 +281,6 @@ async def interpret_request(
         category_l1=effective_l1,
         category_l2=effective_l2,
         delivery_country=delivery_country,
-        delivery_address=form_input.delivery_address,
         required_by_date=form_input.required_by_date,
         preferred_supplier=form_input.preferred_supplier,
         # LLM-enriched fields

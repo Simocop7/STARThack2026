@@ -617,10 +617,10 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
               </p>
             </div>
           )}
-          {orderContext.delivery_address && (
+          {orderContext.delivery_country && (
             <div>
-              <p className="text-[10px] text-slate-400 uppercase tracking-wide font-medium">Delivery</p>
-              <p className="text-sm font-bold text-slate-800">{orderContext.delivery_address}</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide font-medium">Delivery Country</p>
+              <p className="text-sm font-bold text-slate-800">{orderContext.delivery_country}</p>
             </div>
           )}
           {orderContext.required_by_date && (

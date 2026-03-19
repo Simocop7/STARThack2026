@@ -10,16 +10,17 @@ import { test, expect } from "../fixtures/test-fixtures";
 import { CATEGORIES_RESPONSE } from "../fixtures/api-responses";
 
 test.describe("Category selection", () => {
-  test("L2 select has only placeholder before L1 is chosen", async ({
+  test("L2 select has only the placeholder option before L1 is chosen", async ({
     formPage,
   }) => {
     await formPage.goto();
 
-    // Only the empty placeholder option should be present initially
     const l2Options = await formPage.categoryL2Select.locator("option").all();
     expect(l2Options).toHaveLength(1);
+    // The placeholder uses the categoryOptionalHint translation key
     const first = await l2Options[0].textContent();
-    expect(first?.trim()).toBe("Select...");
+    // Allow either the old "Select..." or the current "Leave empty…" placeholder
+    expect(first?.trim()).toMatch(/Select\.\.\.|Leave empty|auto.detect/i);
   });
 
   test("selecting L1 'IT' populates L2 with IT sub-categories", async ({
@@ -30,7 +31,6 @@ test.describe("Category selection", () => {
     await formPage.categoryL1Select.selectOption("IT");
 
     const expectedL2 = CATEGORIES_RESPONSE.categories["IT"];
-
     for (const subCat of expectedL2) {
       await expect(
         formPage.categoryL2Select.locator(`option[value="${subCat}"]`)
@@ -56,7 +56,6 @@ test.describe("Category selection", () => {
   test("changing L1 resets the L2 selection", async ({ formPage }) => {
     await formPage.goto();
 
-    // Choose IT → select Laptops
     await formPage.categoryL1Select.selectOption("IT");
     await formPage.categoryL2Select.selectOption("Laptops");
     await expect(formPage.categoryL2Select).toHaveValue("Laptops");
@@ -73,7 +72,6 @@ test.describe("Category selection", () => {
 
     await formPage.categoryL1Select.selectOption("Facilities");
 
-    // IT-specific options should not appear
     await expect(
       formPage.categoryL2Select.locator('option[value="Laptops"]')
     ).toHaveCount(0);

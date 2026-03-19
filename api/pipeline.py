@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import types
 from typing import Any, Union, get_args, get_origin
 
@@ -14,14 +16,21 @@ from api.models import (
     FormInput,
     IssueType,
     Severity,
+    UserMessage,
+    UserMessageIssue,
     ValidationIssue,
     ValidationResult,
 )
+from api.validators.category_check import check_category
 from api.validators.completeness import check_completeness
 from api.validators.contradiction import check_contradictions
 from api.validators.lead_time import check_lead_time
 from api.validators.policy_rules import check_policy_rules
 from api.validators.supplier_checker import check_supplier
+
+logger = logging.getLogger(__name__)
+
+_LLM_TIMEOUT_SECONDS = 25.0
 
 
 def _apply_fixes(
@@ -66,16 +75,68 @@ def _apply_fixes(
     return data
 
 
+def _fallback_enriched(form_input: FormInput) -> EnrichedRequest:
+    """Build a minimal EnrichedRequest from raw form fields when LLM is unavailable."""
+    return EnrichedRequest(
+        request_text=form_input.request_text,
+        quantity=form_input.quantity,
+        unit_of_measure=form_input.unit_of_measure,
+        category_l1=form_input.category_l1 or None,
+        category_l2=form_input.category_l2 or None,
+        delivery_country=form_input.delivery_country,
+        required_by_date=form_input.required_by_date,
+        preferred_supplier=form_input.preferred_supplier,
+        item_description=form_input.request_text[:200],
+        detected_language=form_input.language,
+    )
+
+
+def _fallback_user_message(
+    issues: list[ValidationIssue],
+    language: str,
+) -> UserMessage:
+    """Build a UserMessage from raw issues when LLM message generation fails."""
+    blocking = [i for i in issues if i.severity in (Severity.CRITICAL, Severity.HIGH)]
+    n = len(blocking)
+    summary = (
+        f"We found {n} issue{'s' if n != 1 else ''} with your request that need{'s' if n == 1 else ''} attention."
+        if n > 0
+        else "Your request looks good!"
+    )
+    msg_issues = [
+        UserMessageIssue(
+            title=i.type.value.replace("_", " ").title(),
+            explanation=i.description,
+            proposed_fix=i.proposed_fix,
+            fix_field=i.fix_action.field if i.fix_action else None,
+            fix_value=i.fix_action.suggested_value if i.fix_action else None,
+        )
+        for i in blocking
+    ]
+    return UserMessage(
+        summary=summary,
+        issues=msg_issues,
+        all_ok_message="Your request is ready to submit." if n == 0 else "",
+    )
+
+
 async def process_request(form_input: FormInput) -> ValidationResult:
     """Run the full 3-stage pipeline."""
     store = DataStore.get()
 
-    # ── Stage 1: LLM interpretation ──
-    enriched = await interpret_request(
-        form_input,
-        categories=store.categories,
-        suppliers=store.suppliers,
-    )
+    # ── Stage 1: LLM interpretation (with graceful degradation) ──
+    try:
+        enriched = await asyncio.wait_for(
+            interpret_request(
+                form_input,
+                categories=store.categories,
+                suppliers=store.suppliers,
+            ),
+            timeout=_LLM_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        logger.exception("LLM interpretation failed — falling back to raw form data")
+        enriched = _fallback_enriched(form_input)
 
     # If the form had a preferred_supplier text but the LLM couldn't resolve it,
     # try our own fuzzy lookup
@@ -118,6 +179,8 @@ async def process_request(form_input: FormInput) -> ValidationResult:
 
     issues.extend(check_completeness(enriched))
 
+    issues.extend(check_category(enriched, store.category_index))
+
     issues.extend(
         check_supplier(
             enriched,
@@ -143,14 +206,21 @@ async def process_request(form_input: FormInput) -> ValidationResult:
 
     corrected = _apply_fixes(enriched, issues)
 
-    # ── Stage 3: LLM message generation (only blocking issues) ──
+    # ── Stage 3: LLM message generation (with graceful degradation) ──
     blocking_issues = [i for i in issues if i.severity in (Severity.CRITICAL, Severity.HIGH)]
-    user_message = await generate_user_message(
-        enriched,
-        blocking_issues,
-        corrected,
-        language=form_input.language,
-    )
+    try:
+        user_message = await asyncio.wait_for(
+            generate_user_message(
+                enriched,
+                blocking_issues,
+                corrected,
+                language=form_input.language,
+            ),
+            timeout=_LLM_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        logger.exception("LLM message generation failed — using fallback message")
+        user_message = _fallback_user_message(issues, form_input.language)
 
     return ValidationResult(
         is_valid=is_valid,
