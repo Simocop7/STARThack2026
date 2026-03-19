@@ -142,10 +142,13 @@ async def process_request(form_input: FormInput) -> ValidationResult:
 
     corrected = _apply_fixes(enriched, issues)
 
-    # ── Stage 3: LLM message generation ──
+    # ── Stage 3: LLM message generation (only blocking issues) ──
+    blocking_issues = [
+        i for i in issues if i.severity in (Severity.CRITICAL, Severity.HIGH)
+    ]
     user_message = await generate_user_message(
         enriched,
-        issues,
+        blocking_issues,
         corrected,
         language=form_input.language,
     )

@@ -8,7 +8,6 @@ import { t } from "../i18n";
 import type {
   FormData,
   ValidationResult,
-  ValidationIssue,
   EnrichedRequest,
 } from "../types";
 import type { VoiceInputHandle } from "./VoiceInput";
@@ -211,13 +210,6 @@ export default function EmployeePortal({ onBack }: Props) {
     return fields;
   }
 
-  // Get non-blocking warnings for review step
-  function getWarnings(): ValidationIssue[] {
-    if (!result) return [];
-    return result.issues.filter(
-      (issue) => issue.severity === "medium" || issue.severity === "low" || issue.severity === "info"
-    );
-  }
 
   const handlePlaybackEnd = () => {
     if (!voiceMode) return;
@@ -321,7 +313,6 @@ export default function EmployeePortal({ onBack }: Props) {
         {!loading && !submitLoading && phase === "review" && result?.enriched_request && (
           <EmployeeReviewStep
             enrichedRequest={result.enriched_request}
-            warnings={getWarnings()}
             language={language}
             autoDetectedFields={getAutoDetectedFields()}
             onConfirm={handleConfirmSubmit}
