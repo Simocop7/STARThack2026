@@ -167,7 +167,7 @@ export default function App() {
         request_id: ranking.request_id,
         category_l1: formData.category_l1,
         category_l2: formData.category_l2,
-        quantity: formData.quantity ?? supplier.unit_price,
+        quantity: formData.quantity ?? 1,
         unit_of_measure: formData.unit_of_measure || "unit",
         currency: "EUR",
         delivery_country: formData.delivery_address?.split(",").pop()?.trim() ?? "DE",

@@ -10,5 +10,7 @@ COUNTRY_TO_REGION: dict[str, str] = {
 }
 
 
-def country_to_region(country_code: str) -> str | None:
+def country_to_region(country_code: str | None) -> str | None:
+    if not country_code:
+        return None
     return COUNTRY_TO_REGION.get(country_code.upper())

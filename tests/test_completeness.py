@@ -2,6 +2,9 @@
 
 from datetime import date
 
+import pytest
+from pydantic import ValidationError
+
 from api.models import EnrichedRequest, Severity, IssueType
 from api.validators.completeness import check_completeness
 
@@ -37,16 +40,14 @@ def test_missing_quantity():
     assert "quantity" in issues[0].fix_action.field.lower()
 
 
-def test_zero_quantity_treated_as_missing():
-    enriched = _make_enriched(quantity=0)
-    issues = check_completeness(enriched)
-    assert any(i.fix_action.field == "quantity" for i in issues)
+def test_zero_quantity_rejected_by_model():
+    with pytest.raises(ValidationError, match="greater than or equal to 1"):
+        _make_enriched(quantity=0)
 
 
-def test_negative_quantity():
-    enriched = _make_enriched(quantity=-5)
-    issues = check_completeness(enriched)
-    assert any("negative" in i.description.lower() for i in issues)
+def test_negative_quantity_rejected_by_model():
+    with pytest.raises(ValidationError, match="greater than or equal to 1"):
+        _make_enriched(quantity=-5)
 
 
 def test_missing_category_l1():

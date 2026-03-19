@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import logging
 
+from openai import APIError, APITimeoutError
+from pydantic import ValidationError
+
 from api.ranking_engine import needs_llm_fallback, rank_suppliers_deterministically
 from api.ranking_llm import rank_suppliers_with_llm
 from api.ranking_models import (
@@ -81,23 +84,14 @@ async def get_top_5_suppliers(
         )
         return llm_result
 
-    except (Exception) as exc:
-        # LLM failure is non-fatal — fall back to deterministic result.
-        # Narrow to expected failures; re-raise truly unexpected ones.
-        expected = (
-            OSError,          # network / timeout
-            ValueError,       # JSON / parsing
-            KeyError,         # missing fields
-        )
-        if not isinstance(exc, expected):
-            # Also allow pydantic ValidationError and openai errors
-            exc_mod = type(exc).__module__
-            if not any(
-                exc_mod.startswith(pfx)
-                for pfx in ("pydantic", "openai", "langchain")
-            ):
-                raise
-
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        APIError,
+        APITimeoutError,
+        ValidationError,
+    ) as exc:
         logger.exception(
             "LLM fallback failed for %s — returning deterministic result.",
             order.request_id,

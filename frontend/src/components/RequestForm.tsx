@@ -91,7 +91,7 @@ export default function RequestForm({
       pendingAutoSubmit.current = false;
       onSubmit(formRef.current);
     }
-  });
+  }, [form, onSubmit]);
 
   function update(field: keyof FormData, value: string | number | null) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -166,7 +166,7 @@ export default function RequestForm({
       }
 
       // In voice mode, auto-submit after parse
-      if (voiceMode || true) {
+      if (voiceMode) {
         pendingAutoSubmit.current = true;
       }
     } catch {

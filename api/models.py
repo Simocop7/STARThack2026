@@ -6,7 +6,7 @@ from datetime import date
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # --- Enums ---
@@ -50,16 +50,26 @@ class CategorySuggestion(BaseModel):
 
 # --- Form Input (what the user submits) ---
 
+_SUPPORTED_LANGUAGES = {"en", "fr", "de", "es", "pt", "it", "ja"}
+
+
 class FormInput(BaseModel):
     request_text: str = Field(..., min_length=1, max_length=10000)
-    quantity: Optional[int] = None
-    unit_of_measure: Optional[str] = None
-    category_l1: Optional[str] = None
-    category_l2: Optional[str] = None
-    delivery_address: Optional[str] = None
+    quantity: Optional[int] = Field(None, ge=1, le=1_000_000)
+    unit_of_measure: Optional[str] = Field(None, max_length=100)
+    category_l1: Optional[str] = Field(None, max_length=100)
+    category_l2: Optional[str] = Field(None, max_length=100)
+    delivery_address: Optional[str] = Field(None, max_length=500)
     required_by_date: Optional[date] = None
-    preferred_supplier: Optional[str] = None  # free text or name
+    preferred_supplier: Optional[str] = Field(None, max_length=200)
     language: str = "en"  # ISO 639-1 code chosen by user
+
+    @field_validator("language")
+    @classmethod
+    def validate_language(cls, v: str) -> str:
+        if v not in _SUPPORTED_LANGUAGES:
+            return "en"
+        return v
 
 
 # --- Enriched Request (after LLM interpretation) ---
@@ -71,10 +81,17 @@ class TextContradiction(BaseModel):
     explanation: str
 
 
+_VALID_COUNTRY_CODES = {
+    "DE", "FR", "NL", "BE", "AT", "IT", "ES", "PL", "UK",
+    "CH", "US", "CA", "BR", "MX", "SG", "AU", "IN", "JP",
+    "UAE", "ZA",
+}
+
+
 class EnrichedRequest(BaseModel):
     # Original form fields (carried through)
     request_text: str
-    quantity: Optional[int] = None
+    quantity: Optional[int] = Field(None, ge=1, le=1_000_000)
     unit_of_measure: Optional[str] = None
     category_l1: Optional[str] = None
     category_l2: Optional[str] = None
@@ -82,6 +99,19 @@ class EnrichedRequest(BaseModel):
     delivery_address: Optional[str] = None
     required_by_date: Optional[date] = None
     preferred_supplier: Optional[str] = None
+
+    @field_validator("delivery_country")
+    @classmethod
+    def validate_country_code(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.upper().strip()
+        if v not in _VALID_COUNTRY_CODES:
+            raise ValueError(
+                f"Invalid delivery country code: '{v}'. "
+                f"Must be one of: {', '.join(sorted(_VALID_COUNTRY_CODES))}"
+            )
+        return v
 
     # LLM-enriched fields
     item_description: str = ""

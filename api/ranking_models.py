@@ -11,7 +11,9 @@ from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+import re
+
+from pydantic import BaseModel, Field, field_validator
 
 
 # ── Input: Clean Order Recap (from the Procurement Office) ─────────────
@@ -25,18 +27,26 @@ class CleanOrderRecap(BaseModel):
     """
 
     request_id: str = Field(..., description="Unique request identifier (REQ-XXXXXX)")
-    category_l1: str = Field(..., description="Top-level category (IT, Facilities, …)")
-    category_l2: str = Field(..., description="Sub-category (Laptops, Cloud Compute, …)")
-    quantity: int = Field(..., gt=0, description="Number of units required")
-    unit_of_measure: str = Field(default="unit", description="e.g. device, license, day")
-    budget_amount: Optional[float] = Field(None, description="Stated budget in order currency")
+    category_l1: str = Field(..., max_length=100, description="Top-level category (IT, Facilities, …)")
+    category_l2: str = Field(..., max_length=100, description="Sub-category (Laptops, Cloud Compute, …)")
+    quantity: int = Field(..., gt=0, le=1_000_000, description="Number of units required")
+    unit_of_measure: str = Field(default="unit", max_length=100, description="e.g. device, license, day")
+    budget_amount: Optional[float] = Field(None, ge=0, description="Stated budget in order currency")
     currency: str = Field(default="EUR", description="ISO currency code (EUR, CHF, USD)")
     delivery_country: str = Field(..., description="ISO country code for delivery")
     required_by_date: Optional[date] = Field(None, description="Deadline for delivery")
     data_residency_required: bool = Field(default=False)
     esg_requirement: bool = Field(default=False)
-    preferred_supplier_id: Optional[str] = Field(None, description="SUP-XXXX if stated")
-    preferred_supplier_name: Optional[str] = Field(None)
+    preferred_supplier_id: Optional[str] = Field(None, max_length=20, description="SUP-XXXX if stated")
+    preferred_supplier_name: Optional[str] = Field(None, max_length=200)
+
+    @field_validator("delivery_country")
+    @classmethod
+    def validate_country_code(cls, v: str) -> str:
+        v = v.upper().strip()
+        if not re.match(r"^[A-Z]{2,3}$", v):
+            raise ValueError(f"Invalid country code format: '{v}'")
+        return v
 
 
 # ── Scoring breakdown (for audit transparency) ────────────────────────
@@ -181,27 +191,27 @@ class RankedSupplierOutput(BaseModel):
 class OrderRequest(BaseModel):
     """Submitted when the procurement office selects a supplier."""
 
-    request_id: str
-    category_l1: str
-    category_l2: str
-    quantity: int
-    unit_of_measure: str
-    currency: str
-    delivery_country: str
+    request_id: str = Field(..., max_length=50)
+    category_l1: str = Field(..., max_length=100)
+    category_l2: str = Field(..., max_length=100)
+    quantity: int = Field(..., gt=0, le=1_000_000)
+    unit_of_measure: str = Field(..., max_length=100)
+    currency: str = Field(..., max_length=10)
+    delivery_country: str = Field(..., max_length=10)
     required_by_date: Optional[date] = None
 
-    selected_supplier_id: str
-    selected_supplier_name: str
-    unit_price: float
-    total_price: float
-    pricing_tier_applied: str
+    selected_supplier_id: str = Field(..., max_length=20)
+    selected_supplier_name: str = Field(..., max_length=200)
+    unit_price: float = Field(..., ge=0)
+    total_price: float = Field(..., ge=0)
+    pricing_tier_applied: str = Field(..., max_length=100)
 
     # Approval context carried forward from ranking output
-    approval_threshold_id: Optional[str] = None
-    approval_threshold_note: Optional[str] = None
-    quotes_required: Optional[int] = None
+    approval_threshold_id: Optional[str] = Field(None, max_length=50)
+    approval_threshold_note: Optional[str] = Field(None, max_length=500)
+    quotes_required: Optional[int] = Field(None, ge=0, le=100)
 
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(None, max_length=2000)
 
 
 class OrderConfirmation(BaseModel):

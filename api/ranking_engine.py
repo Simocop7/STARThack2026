@@ -396,6 +396,9 @@ def _score_suppliers(
     policies: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Normalise dimensions and compute composite scores."""
+    if not eligible:
+        return []
+
     prices = [c["_total"] for c in eligible]
     min_price, max_price = min(prices), max(prices)
     price_range = max_price - min_price if max_price != min_price else 1.0

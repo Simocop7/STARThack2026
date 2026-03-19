@@ -179,10 +179,10 @@ function SupplierCard({
               </div>
             ))}
             {/* Expedited pricing if available */}
-            {supplier.expedited_unit_price && (
+            {supplier.expedited_unit_price != null && supplier.expedited_total_price != null && (
               <p className="text-xs text-gray-500">
                 Expedited option: {fmt(supplier.expedited_unit_price, currency)}/unit
-                → {fmt(supplier.expedited_total_price!, currency)} total
+                → {fmt(supplier.expedited_total_price, currency)} total
               </p>
             )}
           </div>

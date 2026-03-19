@@ -2,18 +2,28 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import time
+import uuid
+from contextlib import asynccontextmanager
+from datetime import datetime as dt, timezone
+from typing import AsyncIterator
 
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Request
+import logging
+
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.security import APIKeyHeader
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+logger = logging.getLogger(__name__)
 
 from api.data_loader import DataStore
 from api.elevenlabs_client import get_elevenlabs_client
@@ -23,7 +33,16 @@ from api.voice_parser import parse_voice_transcript
 from api.ranking_models import CleanOrderRecap, RankedSupplierOutput, ScoringWeights, OrderRequest, OrderConfirmation
 from api.ranking_orchestrator import get_top_5_suppliers
 
-app = FastAPI(title="Smart Procurement Validator", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    DataStore.get()  # pre-load all data
+    yield
+    client = get_elevenlabs_client()
+    if client is not None:
+        await client.close()
+
+app = FastAPI(title="Smart Procurement Validator", version="0.1.0", lifespan=lifespan)
 
 # ---------------------------------------------------------------------------
 # Simple in-memory rate limiter (no extra dependency)
@@ -32,37 +51,39 @@ _RATE_LIMIT_MAX_REQUESTS = int(os.environ.get("RATE_LIMIT_MAX_REQUESTS", "10"))
 _RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
 _MAX_TRACKED_IPS = 10_000
 _request_log: dict[str, list[float]] = {}
+_rate_limit_lock = asyncio.Lock()
 
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    if request.url.path in ("/api/validate", "/api/tts"):
+    if request.url.path in ("/api/validate", "/api/tts", "/api/parse-voice", "/api/rank", "/api/rank/custom-weights", "/api/order"):
         client_ip = request.client.host if request.client else "unknown"
         now = time.time()
         window_start = now - _RATE_LIMIT_WINDOW_SECONDS
 
-        # Prune old entries for this IP
-        timestamps = _request_log.get(client_ip, [])
-        timestamps = [t for t in timestamps if t > window_start]
+        async with _rate_limit_lock:
+            # Prune old entries for this IP
+            timestamps = _request_log.get(client_ip, [])
+            timestamps = [t for t in timestamps if t > window_start]
 
-        if len(timestamps) >= _RATE_LIMIT_MAX_REQUESTS:
+            if len(timestamps) >= _RATE_LIMIT_MAX_REQUESTS:
+                _request_log[client_ip] = timestamps
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Rate limit exceeded. Please try again later."},
+                )
+
+            timestamps.append(now)
             _request_log[client_ip] = timestamps
-            return JSONResponse(
-                status_code=429,
-                content={"detail": "Rate limit exceeded. Please try again later."},
-            )
 
-        timestamps.append(now)
-        _request_log[client_ip] = timestamps
-
-        # Evict stale IPs when the dict grows too large
-        if len(_request_log) > _MAX_TRACKED_IPS:
-            stale_ips = [
-                ip for ip, ts in _request_log.items()
-                if not ts or ts[-1] <= window_start
-            ]
-            for ip in stale_ips:
-                del _request_log[ip]
+            # Evict stale IPs when the dict grows too large
+            if len(_request_log) > _MAX_TRACKED_IPS:
+                stale_ips = [
+                    ip for ip, ts in _request_log.items()
+                    if not ts or ts[-1] <= window_start
+                ]
+                for ip in stale_ips:
+                    del _request_log[ip]
 
     return await call_next(request)
 
@@ -73,15 +94,25 @@ _allowed_origins = os.environ.get(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 
 
-@app.on_event("startup")
-async def startup() -> None:
-    DataStore.get()  # pre-load all data
+# ---------------------------------------------------------------------------
+# Optional API key auth — enabled when APP_API_KEY env var is set
+# ---------------------------------------------------------------------------
+_APP_API_KEY = os.environ.get("APP_API_KEY")
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def verify_api_key(key: str | None = Depends(_api_key_header)) -> None:
+    """Reject requests with invalid API key when APP_API_KEY is configured."""
+    if _APP_API_KEY is None:
+        return  # auth not enabled — allow all requests (dev/demo mode)
+    if key != _APP_API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid or missing API key")
 
 
 @app.get("/api/health")
@@ -89,7 +120,7 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
-@app.post("/api/validate", response_model=ValidationResult)
+@app.post("/api/validate", response_model=ValidationResult, dependencies=[Depends(verify_api_key)])
 async def validate_request(form: FormInput) -> ValidationResult:
     return await process_request(form)
 
@@ -124,12 +155,22 @@ async def search_suppliers(q: str = "", category_l1: str = "", category_l2: str 
     return {"suppliers": results[:20]}
 
 
+_SUPPORTED_LANGUAGES = {"en", "fr", "de", "es", "pt", "it", "ja"}
+
+
 class VoiceInput(BaseModel):
     transcript: str = Field(..., min_length=1, max_length=5000)
     language: str = "en"
 
+    @field_validator("language")
+    @classmethod
+    def validate_language(cls, v: str) -> str:
+        if v not in _SUPPORTED_LANGUAGES:
+            return "en"
+        return v
 
-@app.post("/api/parse-voice")
+
+@app.post("/api/parse-voice", dependencies=[Depends(verify_api_key)])
 async def parse_voice(voice: VoiceInput) -> dict:
     """Parse a voice transcript into structured procurement form fields."""
     from datetime import date as date_mod
@@ -144,7 +185,7 @@ class TTSInput(BaseModel):
     language: str = "en"
 
 
-@app.post("/api/tts")
+@app.post("/api/tts", dependencies=[Depends(verify_api_key)])
 async def text_to_speech(tts_input: TTSInput):
     """Convert text to speech using ElevenLabs. Returns audio/mpeg stream."""
     client = get_elevenlabs_client()
@@ -196,7 +237,7 @@ async def get_request(request_id: str) -> dict:
 # ── Supplier Ranking ───────────────────────────────────────────────
 
 
-@app.post("/api/rank", response_model=RankedSupplierOutput)
+@app.post("/api/rank", response_model=RankedSupplierOutput, dependencies=[Depends(verify_api_key)])
 async def rank_suppliers(
     order: CleanOrderRecap,
     force_llm: bool = False,
@@ -209,7 +250,7 @@ async def rank_suppliers(
     return await get_top_5_suppliers(order, force_llm=force_llm)
 
 
-@app.post("/api/rank/custom-weights", response_model=RankedSupplierOutput)
+@app.post("/api/rank/custom-weights", response_model=RankedSupplierOutput, dependencies=[Depends(verify_api_key)])
 async def rank_suppliers_custom(
     order: CleanOrderRecap,
     weights: ScoringWeights,
@@ -221,16 +262,12 @@ async def rank_suppliers_custom(
 
 # ── Order Placement ─────────────────────────────────────────────────────
 
-import uuid
-from datetime import datetime as dt
-
-
-@app.post("/api/order", response_model=OrderConfirmation)
+@app.post("/api/order", response_model=OrderConfirmation, dependencies=[Depends(verify_api_key)])
 async def place_order(order: OrderRequest) -> OrderConfirmation:
     """Record the procurement office's supplier selection and return a receipt."""
 
     order_id = f"ORD-{uuid.uuid4().hex[:8].upper()}"
-    placed_at = dt.now(tz=__import__("datetime").timezone.utc)
+    placed_at = dt.now(tz=timezone.utc)
 
     approval_required = order.approval_threshold_id is not None
 
