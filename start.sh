@@ -71,7 +71,7 @@ done
 
 # --- Start Frontend (Vite dev server with proxy) ---
 echo -e "${GREEN}Starting frontend on http://localhost:5173${NC}"
-(cd frontend && npm run dev) &
+(cd frontend && npm run dev -- --host) &
 FRONTEND_PID=$!
 
 echo ""
