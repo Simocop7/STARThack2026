@@ -124,6 +124,7 @@ class EnrichedRequest(BaseModel):
     detected_language: str = "en"
     text_quantity_mentioned: Optional[int] = None
     text_contradictions: list[TextContradiction] = Field(default_factory=list)
+    unit_of_measure_required: bool = False  # LLM decides if unit_of_measure is needed
 
     # Auto-categorization
     category_suggestion: Optional[CategorySuggestion] = None

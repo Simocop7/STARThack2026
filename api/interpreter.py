@@ -47,6 +47,7 @@ INSTRUCTIONS:
    - detected_language: ISO 639-1 code of the request_text language
    - text_quantity_mentioned: if the text explicitly mentions a quantity/number, extract it as an integer. null if no quantity in text.
    - text_contradictions: array of contradictions between the structured form fields and the text. Each item has: field, form_value, text_value, explanation.
+   - unit_of_measure_required: boolean. Set to true ONLY when the items being requested are measured in a non-obvious unit that the user must specify (e.g. weight: kg/tons, volume: liters, time: hours/days, length: meters). Set to false when items are countable and the unit is obvious (e.g. laptops, lightbulbs, chairs, licenses — these are just "units"/"devices"/"pieces" and don't need explicit specification).
 
 3. CRITICAL: Only detect contradictions when there is a clear, unambiguous conflict. Do NOT flag minor wording differences.
 4. Always reason internally in English regardless of input language.
@@ -98,6 +99,7 @@ _TOOL_SCHEMA = {
                         "required": ["field", "form_value", "text_value", "explanation"],
                     },
                 },
+                "unit_of_measure_required": {"type": "boolean", "description": "Whether the user must specify a unit of measure (true for bulk/weight/volume items like flour, cable; false for countable items like laptops, chairs)"},
                 "category_l1": {"type": "string", "description": "Auto-detected category L1 from the taxonomy"},
                 "category_l2": {"type": "string", "description": "Auto-detected category L2 from the taxonomy"},
                 "category_confidence": {"type": "number", "description": "Confidence score 0.0-1.0 for the category assignment"},
@@ -128,6 +130,7 @@ _TOOL_SCHEMA = {
                 "detected_language",
                 "text_quantity_mentioned",
                 "text_contradictions",
+                "unit_of_measure_required",
                 "category_l1",
                 "category_l2",
                 "category_confidence",
@@ -248,5 +251,6 @@ async def interpret_request(
         detected_language=form_input.language,
         text_quantity_mentioned=tool_result.get("text_quantity_mentioned"),
         text_contradictions=contradictions,
+        unit_of_measure_required=tool_result.get("unit_of_measure_required", False),
         category_suggestion=category_suggestion,
     )
