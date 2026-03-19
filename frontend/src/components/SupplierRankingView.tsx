@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { CheckCircle2 } from "lucide-react";
 import type { RankedSupplierOutput, ScoredSupplier, Escalation, FormData } from "../types";
 import { PLATFORMS } from "./platforms";
 import { SupplierTable } from "./ui/supplier-table";
+import { useExpandable } from "../hooks/use-expandable";
 
 interface Props {
   result: RankedSupplierOutput;
@@ -159,7 +161,7 @@ function EscalationCard({ esc }: { esc: Escalation }) {
   );
 }
 
-// ── Feature Top-3 card ──────────────────────────────────────────────
+// ── Expandable Feature Card (adapted from expandable-card style) ─────
 
 function FeatureCard({
   supplier,
@@ -174,150 +176,214 @@ function FeatureCard({
   currency: string;
   onSelect: (s: ScoredSupplier) => void;
 }) {
-  const [showDetails, setShowDetails] = useState(false);
+  const { isExpanded, toggleExpand, animatedHeight } = useExpandable();
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (contentRef.current) {
+      animatedHeight.set(isExpanded ? contentRef.current.scrollHeight : 0);
+    }
+  }, [isExpanded, animatedHeight]);
+
   const isFirst = featureRank === 1;
   const compositeScore = Math.round(supplier.composite_score * 100);
   const featureScore = feature.score(supplier);
+  const scoreColor =
+    compositeScore >= 75 ? "text-green-600" :
+    compositeScore >= 50 ? "text-amber-600" : "text-red-500";
+
+  const tasks = supplier.compliance_checks.map((c) => ({
+    title: c.rule_description,
+    completed: c.result === "pass",
+  }));
 
   return (
     <motion.div
-      layout
-      initial={{ opacity: 0, y: 20, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -10, scale: 0.97 }}
-      transition={{ type: "spring", stiffness: 300, damping: 28, mass: 0.8, delay: featureRank * 0.07 }}
-      className={`border-2 rounded-xl overflow-hidden flex flex-col bg-white shadow-sm ${
-        isFirst ? `${feature.cardBorder} shadow-md` : "border-gray-200"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      transition={{ type: "spring", stiffness: 300, damping: 28, delay: featureRank * 0.07 }}
+      className={`w-full cursor-pointer transition-all duration-300 rounded-lg border bg-white shadow-sm hover:shadow-lg ${
+        isFirst ? `border-2 ${feature.cardBorder}` : "border border-gray-200"
       }`}
+      onClick={toggleExpand}
     >
       {/* Card header */}
-      <div className={`px-4 py-2.5 flex items-center justify-between ${isFirst ? feature.cardHeaderBg : "bg-gray-100"}`}>
-        <div className="flex items-center gap-2">
-          <span
-            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
-              isFirst ? "bg-white/25 text-white" : "bg-white text-gray-600 shadow-sm"
-            }`}
-          >
-            {featureRank}
-          </span>
-          {isFirst && (
-            <span className="text-xs font-bold text-white">
-              {feature.icon} {feature.label}
+      <div className="flex flex-col space-y-1.5 p-5 pb-3">
+        <div className="flex justify-between items-start w-full">
+          <div className="space-y-2">
+            {/* Status badge */}
+            <span
+              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                isFirst
+                  ? `${feature.activeBg} text-white border-transparent`
+                  : featureRank === 2
+                  ? "bg-gray-100 text-gray-600 border-transparent"
+                  : "bg-orange-50 text-orange-700 border-orange-200"
+              }`}
+            >
+              {isFirst ? `${feature.icon} ${feature.label}` : `#${featureRank} ${feature.label}`}
             </span>
-          )}
-        </div>
-        <span
-          className={`text-sm font-black ${
-            isFirst ? "text-white" :
-            featureScore >= 75 ? "text-green-600" :
-            featureScore >= 50 ? "text-amber-600" :
-            "text-red-500"
-          }`}
-        >
-          {feature.value(supplier, currency)}
-        </span>
-      </div>
-
-      {/* Supplier name + overall score */}
-      <div className="px-4 pt-3 pb-2 flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <p className="font-bold text-gray-900 text-sm leading-snug truncate">{supplier.supplier_name}</p>
-          <p className="text-[10px] text-gray-400 mt-0.5">{supplier.supplier_id} · {fmtTier(supplier.pricing_tier_applied)}</p>
-          <div className="flex gap-1 mt-1 flex-wrap">
-            {supplier.is_preferred && (
-              <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 rounded-full font-semibold">Preferred</span>
-            )}
-            {supplier.is_incumbent && (
-              <span className="text-[9px] bg-green-100 text-green-700 px-1.5 rounded-full font-semibold">Incumbent</span>
-            )}
-            {!supplier.meets_lead_time && (
-              <span className="text-[9px] bg-red-100 text-red-700 px-1.5 rounded-full font-semibold">⏰ Risk</span>
-            )}
+            <h3 className="text-xl font-semibold text-gray-900 leading-tight">
+              {supplier.supplier_name}
+            </h3>
+            <p className="text-xs text-gray-400 font-mono -mt-1">
+              {supplier.supplier_id} · {fmtTier(supplier.pricing_tier_applied)}
+            </p>
+            <div className="flex gap-1 flex-wrap">
+              {supplier.is_preferred && (
+                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-blue-50 text-blue-700 border-blue-200">
+                  ⭐ Preferred
+                </span>
+              )}
+              {supplier.is_incumbent && (
+                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-green-50 text-green-700 border-green-200">
+                  ✓ Incumbent
+                </span>
+              )}
+              {!supplier.meets_lead_time && (
+                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-red-50 text-red-700 border-red-200">
+                  ⏰ Lead time risk
+                </span>
+              )}
+            </div>
+          </div>
+          {/* Feature highlight value */}
+          <div className="text-right shrink-0 ml-3">
+            <p className={`text-2xl font-black leading-none ${isFirst ? scoreColor : scoreColor}`}>
+              {featureScore}
+            </p>
+            <p className="text-[10px] text-gray-400 mt-0.5">{feature.label.toLowerCase()}</p>
           </div>
         </div>
-        <div className="shrink-0 flex flex-col items-center">
-          <span
-            className={`text-2xl font-black leading-none ${
-              compositeScore >= 75 ? "text-green-600" :
-              compositeScore >= 50 ? "text-amber-600" :
-              "text-red-500"
+      </div>
+
+      {/* Progress bar + composite score */}
+      <div className="px-5 pb-3">
+        <div className="space-y-1.5">
+          <div className="flex justify-between text-xs text-gray-500">
+            <span>Overall score</span>
+            <span className={`font-semibold ${scoreColor}`}>{compositeScore}%</span>
+          </div>
+          <div className="relative h-2 w-full overflow-hidden rounded-full bg-gray-100">
+            <div
+              className={`h-full rounded-full transition-all ${feature.barColor}`}
+              style={{ width: `${compositeScore}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Expandable section */}
+      <div className="px-5 pb-0">
+        <motion.div
+          style={{ height: animatedHeight }}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          className="overflow-hidden"
+        >
+          <div ref={contentRef}>
+            <AnimatePresence>
+              {isExpanded && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="space-y-4 pt-1 pb-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Key metrics grid */}
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    {[
+                      { label: "Unit price", val: fmt(supplier.unit_price, currency) },
+                      { label: "Total cost",  val: fmt(supplier.total_price, currency)  },
+                      { label: "Lead time",  val: `${supplier.standard_lead_time_days}d${supplier.expedited_lead_time_days ? ` / ${supplier.expedited_lead_time_days}d` : ""}` },
+                    ].map((item) => (
+                      <div key={item.label} className="bg-gray-50 rounded-lg px-3 py-2">
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">{item.label}</p>
+                        <p className="text-sm font-bold text-gray-900 mt-0.5">{item.val}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Score breakdown bars */}
+                  <div className="space-y-1.5">
+                    <h4 className="font-medium text-xs text-gray-500 uppercase tracking-wide">Score Breakdown</h4>
+                    {[
+                      { label: "Price",     val: Math.round(supplier.score_breakdown.price_score * 100),     color: "bg-emerald-500" },
+                      { label: "Quality",   val: supplier.raw_scores.quality,                                color: "bg-blue-500"    },
+                      { label: "Trust",     val: 100 - supplier.raw_scores.risk,                             color: "bg-amber-500"   },
+                      { label: "ESG",       val: supplier.raw_scores.esg,                                    color: "bg-green-500"   },
+                      { label: "Lead Time", val: Math.round(supplier.score_breakdown.lead_time_score * 100), color: "bg-purple-500"  },
+                    ].map((item) => (
+                      <div key={item.label} className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 w-16 shrink-0">{item.label}</span>
+                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${item.color}`}
+                            style={{ width: `${Math.min(100, Math.max(0, item.val))}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-semibold text-gray-600 w-7 text-right">{item.val}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Compliance tasks */}
+                  {tasks.length > 0 && (
+                    <div className="space-y-1.5">
+                      <h4 className="font-medium text-xs text-gray-500 uppercase tracking-wide">
+                        Compliance Checks
+                      </h4>
+                      {tasks.map((task, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-sm gap-2">
+                          <span className="text-gray-600 text-xs leading-tight truncate">{task.title}</span>
+                          {task.completed && <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Rationale */}
+                  <div className="border-l-4 border-blue-400 pl-3 py-0.5">
+                    <p className="text-xs text-gray-700 leading-relaxed">{supplier.recommendation_note}</p>
+                  </div>
+
+                  {/* Expedited */}
+                  {supplier.expedited_unit_price && (
+                    <div className="bg-amber-50 rounded-lg px-3 py-2 text-xs text-amber-700">
+                      <span className="font-semibold">⚡ Expedited: </span>
+                      {fmt(supplier.expedited_unit_price, currency)}/unit ·{" "}
+                      <strong>{fmt(supplier.expedited_total_price ?? 0, currency)}</strong> ·{" "}
+                      {supplier.expedited_lead_time_days}d · ≈+8%
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Card footer */}
+      <div className="flex items-center p-5 pt-0 border-t border-gray-100 mt-2">
+        <div className="flex items-center justify-between w-full gap-3">
+          <span className="text-xs text-gray-500 truncate">
+            {isExpanded ? "Click to collapse" : "Click to see details"}
+          </span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(supplier);
+            }}
+            className={`shrink-0 rounded-lg px-4 py-2 text-xs font-bold transition-all active:scale-[0.98] ${
+              isFirst
+                ? `${feature.activeBg} text-white hover:opacity-90 shadow-sm`
+                : "bg-gray-900 text-white hover:bg-gray-800"
             }`}
           >
-            {compositeScore}
-          </span>
-          <span className="text-[10px] text-gray-400 font-medium">overall</span>
+            ✓ Place Order
+          </button>
         </div>
-      </div>
-
-      {/* 3 key metrics */}
-      <div className="grid grid-cols-3 gap-px bg-gray-100 border-t border-b border-gray-100 mx-0">
-        <div className="bg-white px-3 py-2">
-          <p className="text-[9px] text-gray-400 uppercase tracking-wide font-semibold">Unit</p>
-          <p className="text-xs font-bold text-gray-900">{fmt(supplier.unit_price, currency)}</p>
-        </div>
-        <div className="bg-white px-3 py-2">
-          <p className="text-[9px] text-gray-400 uppercase tracking-wide font-semibold">Total</p>
-          <p className="text-xs font-bold text-gray-900">{fmt(supplier.total_price, currency)}</p>
-        </div>
-        <div className="bg-white px-3 py-2">
-          <p className="text-[9px] text-gray-400 uppercase tracking-wide font-semibold">Delivery</p>
-          <p className="text-xs font-bold text-gray-900">
-            {supplier.standard_lead_time_days}d
-            {supplier.expedited_lead_time_days && (
-              <span className="font-normal text-gray-400 text-[10px]"> /{supplier.expedited_lead_time_days}d</span>
-            )}
-          </p>
-        </div>
-      </div>
-
-      {/* Select button */}
-      <div className="px-4 py-3 flex gap-2">
-        <button
-          onClick={() => onSelect(supplier)}
-          className={`flex-1 rounded-xl py-2.5 text-xs font-bold tracking-wide transition-all active:scale-[0.98] ${
-            isFirst
-              ? `${feature.activeBg} text-white hover:opacity-90 shadow-sm`
-              : "bg-gray-900 text-white hover:bg-gray-800"
-          }`}
-        >
-          ✓ Confirm & Place Order
-        </button>
-      </div>
-
-      {/* Collapsible details */}
-      <div className="border-t border-gray-100">
-        <button
-          onClick={() => setShowDetails((v) => !v)}
-          className="w-full px-4 py-2 flex items-center justify-between text-xs font-medium text-gray-500 hover:bg-gray-50 transition-colors"
-        >
-          <span>📋 Rationale & compliance</span>
-          <span className="text-gray-400 text-[10px]">{showDetails ? "▲" : "▼"}</span>
-        </button>
-        {showDetails && (
-          <div className="px-4 pb-4 space-y-3">
-            <div className="border-l-4 border-blue-400 pl-3 py-0.5">
-              <p className="text-xs text-gray-700 leading-relaxed">{supplier.recommendation_note}</p>
-            </div>
-            <div className="space-y-1.5">
-              {supplier.compliance_checks.map((c, idx) => {
-                const icon = c.result === "pass" ? "✓" : c.result === "fail" ? "✗" : c.result === "warning" ? "⚠" : "–";
-                const cls = c.result === "pass" ? "bg-green-50 text-green-700"
-                  : c.result === "fail" ? "bg-red-50 text-red-700"
-                  : c.result === "warning" ? "bg-amber-50 text-amber-700"
-                  : "bg-gray-50 text-gray-500";
-                return (
-                  <div key={idx} className={`flex items-start gap-2 px-2.5 py-1.5 rounded-lg ${cls}`}>
-                    <span className="text-xs font-bold shrink-0">{icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold leading-snug">{c.rule_description}</p>
-                      {c.detail && <p className="text-[10px] opacity-70 mt-0.5">{c.detail}</p>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
     </motion.div>
   );
