@@ -65,6 +65,7 @@ export default function RequestForm({
   const [voiceParsing, setVoiceParsing] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [categoryIndex, setCategoryIndex] = useState<Record<string, string[]>>({});
 
   const internalVoiceRef = useRef<VoiceInputHandle | null>(null);
   const effectiveVoiceRef = voiceInputRef ?? internalVoiceRef;
@@ -82,6 +83,10 @@ export default function RequestForm({
       .catch(() => {
         setLoadError(i.loadError);
       });
+    fetch("/api/categories")
+      .then((r) => r.json())
+      .then((data) => setCategoryIndex(data.categories ?? {}))
+      .catch(() => {});
   }, []);
 
   // Sync initialData changes (e.g. corrected form from validation)
@@ -290,6 +295,44 @@ export default function RequestForm({
           onChange={(e) => update("request_text", e.target.value)}
         />
         <p className="mt-1 text-xs text-gray-500">{i.categoryAutoDetectHint}</p>
+      </div>
+
+      {/* Category selectors (optional) */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {i.categoryL1Optional}
+          </label>
+          <select
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+            value={form.category_l1}
+            onChange={(e) => {
+              update("category_l1", e.target.value);
+              update("category_l2", "");
+            }}
+          >
+            <option value="">{i.categoryOptionalHint}</option>
+            {Object.keys(categoryIndex).map((l1) => (
+              <option key={l1} value={l1}>{l1}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {i.categoryL2Optional}
+          </label>
+          <select
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+            value={form.category_l2}
+            disabled={!form.category_l1}
+            onChange={(e) => update("category_l2", e.target.value)}
+          >
+            <option value="">{i.categoryOptionalHint}</option>
+            {(categoryIndex[form.category_l1] ?? []).map((l2) => (
+              <option key={l2} value={l2}>{l2}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Quantity + unit */}

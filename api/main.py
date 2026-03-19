@@ -95,7 +95,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 
@@ -271,15 +271,23 @@ class EmployeeFormInput(BaseModel):
     request_text: str = Field(..., min_length=1, max_length=10000)
     quantity: int | None = None
     unit_of_measure: str | None = None
+    category_l1: str | None = None
+    category_l2: str | None = None
     delivery_address: str | None = None
     required_by_date: str | None = None
     preferred_supplier: str | None = None
     language: str = "en"
+    validated: bool = False
+    enriched_data: dict | None = None
 
 
 @app.post("/api/employee/submit")
 async def submit_employee_request(req: EmployeeFormInput) -> dict:
-    """Store a raw employee procurement request for the office to process."""
+    """Store an employee procurement request for the office to process.
+
+    If `validated=true`, the request has passed validation and includes
+    enriched data from the LLM interpretation step.
+    """
     emp_id = f"EMP-{uuid.uuid4().hex[:8].upper()}"
     record = {
         "id": emp_id,
@@ -288,12 +296,14 @@ async def submit_employee_request(req: EmployeeFormInput) -> dict:
         "request_text": req.request_text,
         "quantity": req.quantity,
         "unit_of_measure": req.unit_of_measure or "",
-        "category_l1": "",
-        "category_l2": "",
+        "category_l1": req.category_l1 or "",
+        "category_l2": req.category_l2 or "",
         "delivery_address": req.delivery_address or "",
         "required_by_date": req.required_by_date or "",
         "preferred_supplier": req.preferred_supplier or "",
         "language": req.language,
+        "validated": req.validated,
+        "enriched_data": req.enriched_data,
     }
     _employee_requests.append(record)
     return {"request_id": emp_id, "status": "pending"}

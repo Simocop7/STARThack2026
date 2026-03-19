@@ -1,6 +1,20 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import CategoryDisambiguation from "./CategoryDisambiguation";
+import EmployeeReviewStep from "./EmployeeReviewStep";
 import RequestForm from "./RequestForm";
-import type { FormData } from "../types";
+import ValidationBanner from "./ValidationBanner";
+import VoiceConversation from "./VoiceConversation";
+import { t } from "../i18n";
+import type {
+  FormData,
+  ValidationResult,
+  ValidationIssue,
+  EnrichedRequest,
+} from "../types";
+import type { VoiceInputHandle } from "./VoiceInput";
+
+type Phase = "form" | "review" | "submitted";
+type ConversationPhase = "idle" | "speaking" | "listening" | "processing";
 
 interface Props {
   onBack: () => void;
@@ -11,44 +25,218 @@ interface SubmitResult {
 }
 
 export default function EmployeePortal({ onBack }: Props) {
-  const [submitted, setSubmitted] = useState<SubmitResult | null>(null);
+  const [phase, setPhase] = useState<Phase>("form");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [language, setLanguage] = useState("en");
 
+  // Validation state
+  const [result, setResult] = useState<ValidationResult | null>(null);
+  const [formData, setFormData] = useState<FormData | null>(null);
+  const [originalFormData, setOriginalFormData] = useState<FormData | null>(null);
+
+  // Submit state
+  const [submitted, setSubmitted] = useState<SubmitResult | null>(null);
+  const [submitLoading, setSubmitLoading] = useState(false);
+
+  // Voice state
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [ttsText, setTtsText] = useState<string | null>(null);
+  const [conversationPhase, setConversationPhase] = useState<ConversationPhase>("idle");
+  const voiceInputRef = useRef<VoiceInputHandle | null>(null);
+
+  const i = t(language);
+
+  // ── Validate request ────────────────────────────────────────────
   async function handleSubmit(data: FormData) {
+    setFormData(data);
+    setOriginalFormData(data);
+    setLanguage(data.language);
     setLoading(true);
+    setResult(null);
     setError(null);
+    setTtsText(null);
+
+    if (voiceMode) setConversationPhase("processing");
+
     try {
+      const body: Record<string, unknown> = {
+        request_text: data.request_text,
+        quantity: data.quantity || null,
+        unit_of_measure: data.unit_of_measure || null,
+        category_l1: data.category_l1 || null,
+        category_l2: data.category_l2 || null,
+        delivery_address: data.delivery_address || null,
+        required_by_date: data.required_by_date || null,
+        preferred_supplier: data.preferred_supplier || null,
+        language: data.language || "en",
+      };
+
+      const res = await fetch("/api/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const detail = await res.text();
+        setError(`Validation failed (${res.status}): ${detail}`);
+        if (voiceMode) setConversationPhase("idle");
+        return;
+      }
+
+      const json: ValidationResult = await res.json();
+      setResult(json);
+
+      // Pre-fill corrected values in form
+      if (!json.is_valid && json.corrected_request) {
+        const c = json.corrected_request;
+        setFormData({
+          request_text: (c.request_text as string) || data.request_text,
+          quantity: (c.quantity as number) ?? data.quantity,
+          unit_of_measure: (c.unit_of_measure as string) || data.unit_of_measure,
+          category_l1: (c.category_l1 as string) || data.category_l1,
+          category_l2: (c.category_l2 as string) || data.category_l2,
+          delivery_address: (c.delivery_address as string) || data.delivery_address,
+          required_by_date: ((c.required_by_date as string) || data.required_by_date || "").split("T")[0],
+          preferred_supplier: (c.preferred_supplier as string) || data.preferred_supplier,
+          language: data.language,
+        });
+      }
+
+      // If valid → move to review step
+      if (json.is_valid) {
+        setPhase("review");
+      }
+
+      if (voiceMode && json.user_message?.summary) {
+        setTtsText(json.user_message.summary);
+      } else if (voiceMode) {
+        setConversationPhase("idle");
+      }
+    } catch {
+      setError(i.networkError);
+      if (voiceMode) setConversationPhase("idle");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Confirm and submit to procurement office ───────────────────
+  async function handleConfirmSubmit() {
+    if (!result?.enriched_request || !formData) return;
+    setSubmitLoading(true);
+    setError(null);
+
+    try {
+      const enriched = result.enriched_request;
       const res = await fetch("/api/employee/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          request_text: data.request_text,
-          quantity: data.quantity ?? null,
-          unit_of_measure: data.unit_of_measure || null,
-          delivery_address: data.delivery_address || null,
-          required_by_date: data.required_by_date || null,
-          preferred_supplier: data.preferred_supplier || null,
-          language: data.language || "en",
+          request_text: formData.request_text,
+          quantity: enriched.quantity ?? formData.quantity ?? null,
+          unit_of_measure: enriched.unit_of_measure || formData.unit_of_measure || null,
+          category_l1: enriched.category_l1 || null,
+          category_l2: enriched.category_l2 || null,
+          delivery_address: enriched.delivery_address || formData.delivery_address || null,
+          required_by_date: enriched.required_by_date || formData.required_by_date || null,
+          preferred_supplier: enriched.preferred_supplier || formData.preferred_supplier || null,
+          language: formData.language || "en",
+          validated: true,
+          enriched_data: enriched,
         }),
       });
+
       if (!res.ok) {
         setError("Failed to submit request. Please try again.");
         return;
       }
       const json: SubmitResult = await res.json();
       setSubmitted(json);
+      setPhase("submitted");
     } catch {
       setError("Network error. Please check your connection and try again.");
     } finally {
-      setLoading(false);
+      setSubmitLoading(false);
     }
   }
 
+  // ── Go back to form from review ────────────────────────────────
+  function handleEditFromReview() {
+    // Pre-fill form with enriched categories if the user left them empty
+    if (result?.enriched_request && formData) {
+      const enriched = result.enriched_request;
+      setFormData({
+        ...formData,
+        category_l1: enriched.category_l1 || formData.category_l1,
+        category_l2: enriched.category_l2 || formData.category_l2,
+      });
+    }
+    setResult(null);
+    setPhase("form");
+  }
+
+  function handleCategoryConfirm(categoryL1: string, categoryL2: string) {
+    if (!formData) return;
+    handleSubmit({ ...formData, category_l1: categoryL1, category_l2: categoryL2 });
+  }
+
   function handleNewRequest() {
+    setPhase("form");
+    setResult(null);
+    setFormData(null);
+    setOriginalFormData(null);
     setSubmitted(null);
     setError(null);
+    setVoiceMode(false);
+    setTtsText(null);
+    setConversationPhase("idle");
   }
+
+  // Compute which fields the LLM auto-detected
+  function getAutoDetectedFields(): string[] {
+    if (!originalFormData || !result?.enriched_request) return [];
+    const fields: string[] = [];
+    if (!originalFormData.category_l1 && result.enriched_request.category_l1) {
+      fields.push("category_l1");
+    }
+    if (!originalFormData.category_l2 && result.enriched_request.category_l2) {
+      fields.push("category_l2");
+    }
+    // delivery_country is always auto-detected from address
+    if (result.enriched_request.delivery_country) {
+      fields.push("delivery_country");
+    }
+    return fields;
+  }
+
+  // Get non-blocking warnings for review step
+  function getWarnings(): ValidationIssue[] {
+    if (!result) return [];
+    return result.issues.filter(
+      (issue) => issue.severity === "medium" || issue.severity === "low" || issue.severity === "info"
+    );
+  }
+
+  const handlePlaybackEnd = () => {
+    if (!voiceMode) return;
+    if (result?.is_valid) {
+      setConversationPhase("idle");
+      return;
+    }
+    setConversationPhase("listening");
+    setTimeout(() => {
+      voiceInputRef.current?.startListening();
+    }, 300);
+  };
+
+  const handleVoiceStop = () => {
+    setVoiceMode(false);
+    setTtsText(null);
+    setConversationPhase("idle");
+    voiceInputRef.current?.stopListening();
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -70,8 +258,37 @@ export default function EmployeePortal({ onBack }: Props) {
       </header>
 
       <main className="max-w-4xl mx-auto py-8 px-6">
-        {/* Success confirmation */}
-        {submitted && (
+        <VoiceConversation
+          textToSpeak={ttsText}
+          language={language}
+          active={voiceMode}
+          onPlaybackEnd={handlePlaybackEnd}
+          onStop={handleVoiceStop}
+          externalPhase={conversationPhase}
+        />
+
+        {/* Error */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <p className="text-sm text-red-800">{error}</p>
+            <button onClick={() => setError(null)} className="mt-2 text-sm text-red-600 hover:text-red-800 underline">
+              {i.tryAgain}
+            </button>
+          </div>
+        )}
+
+        {/* Loading */}
+        {(loading || submitLoading) && (
+          <div className="flex flex-col items-center gap-4 py-16">
+            <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+            <p className="text-gray-600">
+              {submitLoading ? "Submitting your request..." : i.analyzing}
+            </p>
+          </div>
+        )}
+
+        {/* ── Phase: Submitted ── */}
+        {!loading && !submitLoading && phase === "submitted" && submitted && (
           <div className="flex flex-col items-center gap-6 py-16">
             <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">
               <svg className="w-10 h-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -81,62 +298,71 @@ export default function EmployeePortal({ onBack }: Props) {
             <div className="text-center max-w-md">
               <h2 className="text-2xl font-semibold text-gray-900">Request Submitted!</h2>
               <p className="mt-3 text-gray-600">
-                Your procurement request has been sent to the procurement office for review.
+                Your procurement request has been validated and sent to the procurement office for processing.
               </p>
               <div className="mt-4 bg-gray-100 rounded-lg px-4 py-3 inline-block">
                 <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">Reference ID</span>
                 <p className="text-lg font-bold text-gray-800 mt-0.5 font-mono">{submitted.request_id}</p>
               </div>
               <p className="mt-4 text-sm text-gray-500">
-                The procurement office will validate your request and select the best supplier. You'll be notified once it's processed.
+                The procurement office will select the best supplier and complete the order.
               </p>
             </div>
             <button
               onClick={handleNewRequest}
               className="mt-2 bg-blue-600 text-white rounded-lg px-6 py-3 font-medium hover:bg-blue-700 transition-colors"
             >
-              Submit Another Request
+              {i.newRequest}
             </button>
           </div>
         )}
 
-        {/* Loading state */}
-        {!submitted && loading && (
-          <div className="flex flex-col items-center gap-4 py-16">
-            <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
-            <p className="text-gray-600">Submitting your request…</p>
-          </div>
+        {/* ── Phase: Review ── */}
+        {!loading && !submitLoading && phase === "review" && result?.enriched_request && (
+          <EmployeeReviewStep
+            enrichedRequest={result.enriched_request}
+            warnings={getWarnings()}
+            language={language}
+            autoDetectedFields={getAutoDetectedFields()}
+            onConfirm={handleConfirmSubmit}
+            onEdit={handleEditFromReview}
+          />
         )}
 
-        {/* Error */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <p className="text-sm text-red-800">{error}</p>
-            <button onClick={() => setError(null)} className="mt-2 text-sm text-red-600 hover:text-red-800 underline">
-              Dismiss
-            </button>
-          </div>
-        )}
+        {/* ── Phase: Form ── */}
+        {!loading && !submitLoading && phase === "form" && (
+          <>
+            {/* Category disambiguation */}
+            {result?.category_suggestion?.needs_disambiguation && (
+              <CategoryDisambiguation
+                suggestion={result.category_suggestion}
+                lang={language}
+                onConfirm={handleCategoryConfirm}
+              />
+            )}
 
-        {/* Form */}
-        {!submitted && !loading && (
-          <div>
+            {/* Validation errors */}
+            {result && !result.is_valid && !result.category_suggestion?.needs_disambiguation && (
+              <ValidationBanner result={result} lang={language} />
+            )}
+
             <div className="mb-6">
               <h2 className="text-xl font-semibold text-gray-900">New Procurement Request</h2>
               <p className="mt-1 text-sm text-gray-500">
-                Describe what you need in plain language. The procurement office will handle supplier selection and approval.
+                Describe what you need in plain language. Your request will be validated before submission.
               </p>
             </div>
             <RequestForm
               onSubmit={handleSubmit}
-              initialData={null}
-              onLanguageChange={() => {}}
-              voiceMode={false}
-              onVoiceModeChange={() => {}}
+              initialData={formData}
+              onLanguageChange={setLanguage}
+              voiceMode={voiceMode}
+              onVoiceModeChange={setVoiceMode}
+              voiceInputRef={voiceInputRef}
               showDemoSelector={true}
-              submitLabel="Submit Request"
+              submitLabel={i.validateRequest}
             />
-          </div>
+          </>
         )}
       </main>
     </div>
