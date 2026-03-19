@@ -1,0 +1,48 @@
+"""Check that all required fields are present and non-empty."""
+
+from __future__ import annotations
+
+from api.models import EnrichedRequest, FixAction, IssueType, Severity, ValidationIssue
+
+_REQUIRED_FIELDS = {
+    "quantity": "Quantity (number of items/units)",
+    "category_l1": "Category L1 (main category)",
+    "category_l2": "Category L2 (sub-category)",
+    "delivery_country": "Delivery country",
+    "required_by_date": "Required-by date",
+}
+
+
+def check_completeness(enriched: EnrichedRequest) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    counter = 0
+
+    for field, label in _REQUIRED_FIELDS.items():
+        value = getattr(enriched, field, None)
+        if value is None or value == "" or value == 0:
+            counter += 1
+            issues.append(
+                ValidationIssue(
+                    issue_id=f"COMP-{counter:03d}",
+                    severity=Severity.CRITICAL,
+                    type=IssueType.MISSING_INFO,
+                    description=f"Required field '{label}' is missing or empty.",
+                    proposed_fix=f"Please provide a value for '{label}'.",
+                    fix_action=FixAction(field=field),
+                )
+            )
+
+    if enriched.quantity is not None and enriched.quantity < 0:
+        counter += 1
+        issues.append(
+            ValidationIssue(
+                issue_id=f"COMP-{counter:03d}",
+                severity=Severity.CRITICAL,
+                type=IssueType.MISSING_INFO,
+                description=f"Quantity cannot be negative (got {enriched.quantity}).",
+                proposed_fix="Correct the quantity to a positive number.",
+                fix_action=FixAction(field="quantity"),
+            )
+        )
+
+    return issues
