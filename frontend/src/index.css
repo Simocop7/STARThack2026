@@ -7,10 +7,10 @@
   transition: transform 60ms ease-out, box-shadow 60ms ease-out;
   transform: scale(calc(1 + var(--volume, 0) * 0.4));
   box-shadow:
-    0 0 calc(30px + var(--volume, 0) * 80px) rgba(99, 102, 241, calc(0.3 + var(--volume, 0) * 0.5)),
-    0 0 calc(60px + var(--volume, 0) * 140px) rgba(139, 92, 246, calc(0.15 + var(--volume, 0) * 0.25)),
-    0 0 calc(100px + var(--volume, 0) * 200px) rgba(168, 85, 247, calc(0.05 + var(--volume, 0) * 0.1));
-  background: radial-gradient(circle at 40% 40%, #a78bfa, #6366f1, #4f46e5);
+    0 0 calc(30px + var(--volume, 0) * 80px) rgba(220, 38, 38, calc(0.3 + var(--volume, 0) * 0.5)),
+    0 0 calc(60px + var(--volume, 0) * 140px) rgba(239, 68, 68, calc(0.15 + var(--volume, 0) * 0.25)),
+    0 0 calc(100px + var(--volume, 0) * 200px) rgba(244, 63, 94, calc(0.05 + var(--volume, 0) * 0.1));
+  background: radial-gradient(circle at 40% 40%, #fecaca, #ef4444, #991b1b);
 }
 
 /* Orb: AI speaking state — gradient hue rotation + gentle pulse */
@@ -24,12 +24,12 @@
 
 .voice-orb-speaking {
   animation: speakingOrb 3s ease-in-out infinite;
-  background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899, #f97316);
+  background: linear-gradient(135deg, #dc2626, #ef4444, #f43f5e, #991b1b);
   background-size: 300% 300%;
   box-shadow:
-    0 0 60px rgba(139, 92, 246, 0.5),
-    0 0 120px rgba(168, 85, 247, 0.25),
-    0 0 200px rgba(236, 72, 153, 0.1);
+    0 0 60px rgba(239, 68, 68, 0.5),
+    0 0 120px rgba(244, 63, 94, 0.25),
+    0 0 200px rgba(220, 38, 38, 0.1);
 }
 
 /* Orb: processing state — spinning ring */
@@ -40,9 +40,9 @@
 
 .voice-orb-processing {
   box-shadow:
-    0 0 40px rgba(99, 102, 241, 0.3),
-    0 0 80px rgba(139, 92, 246, 0.15);
-  background: radial-gradient(circle at 40% 40%, #a78bfa, #6366f1, #4f46e5);
+    0 0 40px rgba(239, 68, 68, 0.3),
+    0 0 80px rgba(244, 63, 94, 0.15);
+  background: radial-gradient(circle at 40% 40%, #fecaca, #ef4444, #991b1b);
 }
 
 /* Overlay entrance */
@@ -107,6 +107,63 @@
 
 .hero-fade-in {
   animation: heroFadeIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.fade-in {
+  animation: heroFadeIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.fade-in-subtitle {
+  animation: heroFadeIn 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes exploreArrowFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(4px);
+  }
+}
+
+/* Hero futuristic "Scroll to explore" */
+.explore-btn {
+  position: absolute;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  z-index: 70;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 26px;
+  border-radius: 9999px;
+  background: rgba(220, 38, 38, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 18px 60px rgba(220, 38, 38, 0.15);
+  cursor: pointer;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+  pointer-events: auto;
+}
+
+.explore-btn:hover {
+  transform: translateX(-50%) translateY(-2px);
+  background: rgba(220, 38, 38, 0.18);
+  border-color: rgba(239, 68, 68, 0.8);
+}
+
+.explore-arrow {
+  display: inline-flex;
+  align-items: center;
+}
+
+.arrow-svg {
+  animation: exploreArrowFloat 1.6s ease-in-out infinite;
 }
 
 /* Enter button */

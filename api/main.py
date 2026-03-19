@@ -187,14 +187,14 @@ async def health() -> dict:
     response_model=ValidationResult,
     dependencies=[Depends(verify_api_key)],
 )
-async def validate_request(form: FormInput) -> ValidationResult | JSONResponse:
+async def validate_request(form: FormInput) -> ValidationResult:
     try:
         return await process_request(form)
     except Exception:
         logger.exception("Validation pipeline failed")
-        return JSONResponse(
+        raise HTTPException(
             status_code=503,
-            content={"detail": "Our AI service is temporarily unavailable. Please try again in a moment."},
+            detail="Our AI service is temporarily unavailable. Please try again in a moment.",
         )
 
 
@@ -245,8 +245,8 @@ class VoiceInput(BaseModel):
         return v
 
 
-@app.post("/api/parse-voice", response_model=None, dependencies=[Depends(verify_api_key)])
-async def parse_voice(voice: VoiceInput) -> dict | JSONResponse:
+@app.post("/api/parse-voice", dependencies=[Depends(verify_api_key)], response_model=None)
+async def parse_voice(voice: VoiceInput) -> JSONResponse:
     """Parse a voice transcript into structured procurement form fields."""
     from datetime import date as date_mod
 
@@ -257,7 +257,7 @@ async def parse_voice(voice: VoiceInput) -> dict | JSONResponse:
             voice.language,
             today,
         )
-        return result
+        return JSONResponse(content=result)
     except Exception:
         logger.exception("Voice parsing failed")
         return JSONResponse(

@@ -8,9 +8,11 @@ import {
 
 type Role = "employee" | "office";
 type OfficeView = "inbox" | "process";
+type EmployeeView = "new-request" | "history";
 
 interface AppShellProps {
   role: Role;
+  employeeView: EmployeeView;
   officeView: OfficeView;
   /** Single navigation callback — sidebar drives all routing */
   onNavigate: (role: Role, view: string) => void;
@@ -100,7 +102,7 @@ function NavGroup({ label, items, defaultOpen = true }: GroupProps) {
 
 // ── Sidebar content ─────────────────────────────────────────────────
 function SidebarContent({
-  role, officeView, onNavigate, onSwitchRole,
+  role, employeeView, officeView, onNavigate, onSwitchRole,
 }: Omit<AppShellProps, "children">) {
   const isEmployee = role === "employee";
   const isOffice   = role === "office";
@@ -111,14 +113,14 @@ function SidebarContent({
       {
         icon: <PlusCircle className="w-4 h-4" />,
         label: "Send Request",
-        active: isEmployee,
+        active: isEmployee && employeeView === "new-request",
         onClick: () => onNavigate("employee", "new-request"),
       },
       {
         icon: <History className="w-4 h-4" />,
         label: "Requests History",
-        disabled: true,
-        onClick: () => {},
+        active: isEmployee && employeeView === "history",
+        onClick: () => onNavigate("employee", "history"),
       },
     ],
   };
@@ -168,8 +170,7 @@ function SidebarContent({
             <Building2 className="w-4 h-4 text-white" />
           </div>
           <div>
-            <p className="text-sm font-black text-white tracking-wide leading-none">ChainIQ</p>
-            <p className="text-[10px] text-white/40 mt-0.5 leading-none">Smart Procurement</p>
+            <p className="text-sm font-black text-white tracking-wide leading-none">SilvioIQ</p>
           </div>
         </div>
       </div>
@@ -211,11 +212,11 @@ function SidebarContent({
 
 // ── Shell ───────────────────────────────────────────────────────────
 export default function AppShell({
-  role, officeView, onNavigate, onSwitchRole, children,
+  role, employeeView, officeView, onNavigate, onSwitchRole, children,
 }: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const sidebarProps = { role, officeView, onNavigate, onSwitchRole };
+  const sidebarProps = { role, employeeView, officeView, onNavigate, onSwitchRole };
 
   const handleNavigate: typeof onNavigate = (r, v) => {
     setDrawerOpen(false);

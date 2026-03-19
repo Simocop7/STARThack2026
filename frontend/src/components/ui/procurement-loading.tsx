@@ -39,33 +39,15 @@ const SENTENCES: Record<LoadingPhase, string[]> = {
   ],
 };
 
-const PHASE_META: Record<LoadingPhase, { icon: string; title: string; color: string; bg: string; ring: string }> = {
-  validating: {
-    icon: "🔍",
-    title: "Analyzing Request",
-    color: "text-blue-600",
-    bg: "bg-blue-50",
-    ring: "ring-blue-200",
-  },
-  ranking: {
-    icon: "📊",
-    title: "Ranking Suppliers",
-    color: "text-indigo-600",
-    bg: "bg-indigo-50",
-    ring: "ring-indigo-200",
-  },
-  ordering: {
-    icon: "📋",
-    title: "Placing Order",
-    color: "text-green-600",
-    bg: "bg-green-50",
-    ring: "ring-green-200",
-  },
+const PHASE_TITLES: Record<LoadingPhase, string> = {
+  validating: "Analyzing Request",
+  ranking: "Ranking Suppliers",
+  ordering: "Placing Order",
 };
 
 export function ProcurementLoading({ phase }: ProcurementLoadingProps) {
   const sentences = SENTENCES[phase];
-  const meta = PHASE_META[phase];
+  const title = PHASE_TITLES[phase];
 
   const [index, setIndex] = useState(0);
 
@@ -85,18 +67,8 @@ export function ProcurementLoading({ phase }: ProcurementLoadingProps) {
       transition={{ duration: 0.3 }}
       className="flex flex-col items-center justify-center gap-8 py-20 px-6 text-center"
     >
-      {/* Animated icon */}
-      <motion.div
-        animate={{ scale: [1, 1.06, 1] }}
-        transition={{ repeat: Infinity, duration: 2.4, ease: "easeInOut" }}
-        className={`w-20 h-20 rounded-2xl ${meta.bg} ring-4 ${meta.ring} flex items-center justify-center shadow-sm`}
-      >
-        <span className="text-4xl leading-none">{meta.icon}</span>
-      </motion.div>
-
-      {/* Phase title */}
       <div className="space-y-2">
-        <h2 className={`text-xl font-bold ${meta.color}`}>{meta.title}</h2>
+        <h2 className="text-xl font-bold text-red-200">{title}</h2>
 
         {/* Rotating sentence */}
         <div className="h-6 relative overflow-hidden">
@@ -107,31 +79,17 @@ export function ProcurementLoading({ phase }: ProcurementLoadingProps) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.35 }}
-              className="text-sm text-gray-500 absolute inset-x-0 text-center"
+              className="text-sm text-white/60 absolute inset-x-0 text-center"
             >
               {sentences[index]}
             </motion.p>
           </AnimatePresence>
         </div>
-      </div>
 
-      {/* Bouncing dots */}
-      <div className={meta.color}>
-        <MessageLoading />
-      </div>
-
-      {/* Progress dots indicator */}
-      <div className="flex gap-1.5">
-        {sentences.map((_, i) => (
-          <motion.div
-            key={i}
-            animate={{ opacity: i === index ? 1 : 0.25, scale: i === index ? 1.3 : 1 }}
-            transition={{ duration: 0.3 }}
-            className={`w-1.5 h-1.5 rounded-full ${
-              i === index ? meta.color.replace("text-", "bg-") : "bg-gray-300"
-            }`}
-          />
-        ))}
+        {/* Loading icon directly under the changing sentence */}
+        <div className="flex items-center justify-center mt-2 text-red-200">
+          <MessageLoading />
+        </div>
       </div>
     </motion.div>
   );

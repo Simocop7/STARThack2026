@@ -8,9 +8,9 @@ interface Props {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-800",
-  processing: "bg-blue-100 text-blue-800",
-  completed: "bg-green-100 text-green-800",
+  pending: "bg-gray-100 text-gray-700",
+  processing: "bg-red-100 text-red-800",
+  completed: "bg-gray-100 text-gray-700",
   refused: "bg-red-100 text-red-800",
 };
 
@@ -73,7 +73,7 @@ export default function PendingRequestsView({ onProcess, onRefuse, onNewManual }
         </div>
         <button
           onClick={onNewManual}
-          className="flex items-center gap-2 bg-indigo-600 text-white rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-indigo-700 transition-colors"
+          className="flex items-center gap-2 bg-red-600 text-white rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-red-700 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -84,7 +84,7 @@ export default function PendingRequestsView({ onProcess, onRefuse, onNewManual }
 
       {loading && (
         <div className="flex items-center gap-3 py-12 justify-center text-gray-500">
-          <div className="w-5 h-5 border-2 border-gray-300 border-t-indigo-600 rounded-full animate-spin" />
+          <div className="w-5 h-5 border-2 border-gray-300 border-t-red-600 rounded-full animate-spin" />
           Loading requests…
         </div>
       )}
@@ -106,7 +106,7 @@ export default function PendingRequestsView({ onProcess, onRefuse, onNewManual }
           </p>
           <button
             onClick={onNewManual}
-            className="mt-5 text-sm text-indigo-600 font-medium hover:underline"
+            className="mt-5 text-sm text-red-600 font-medium hover:underline"
           >
             Or create a manual request →
           </button>
@@ -118,13 +118,13 @@ export default function PendingRequestsView({ onProcess, onRefuse, onNewManual }
           {requests.map((req) => (
             <div
               key={req.id}
-              className="bg-white border border-gray-200 rounded-xl p-5 flex items-start gap-4 hover:border-indigo-300 hover:shadow-sm transition-all"
+              className="bg-white border border-gray-200 rounded-xl p-5 flex items-start gap-4 hover:border-red-300 hover:shadow-sm transition-all"
             >
               {/* Status dot */}
               <div className={`mt-1 w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                req.status === "completed" ? "bg-green-500" :
-                req.status === "processing" ? "bg-blue-500" :
-                req.status === "refused" ? "bg-red-500" : "bg-amber-400"
+                req.status === "completed" ? "bg-gray-500" :
+                req.status === "processing" ? "bg-red-500" :
+                req.status === "refused" ? "bg-red-500" : "bg-gray-400"
               }`} />
 
               <div className="flex-1 min-w-0">
@@ -177,14 +177,14 @@ export default function PendingRequestsView({ onProcess, onRefuse, onNewManual }
                   </button>
                   <button
                     onClick={() => handleProcess(req)}
-                    className="bg-indigo-600 text-white text-sm font-medium rounded-lg px-4 py-2 hover:bg-indigo-700 transition-colors"
+                    className="bg-red-600 text-white text-sm font-medium rounded-lg px-4 py-2 hover:bg-red-700 transition-colors"
                   >
                     Process
                   </button>
                 </div>
               )}
               {req.status === "completed" && (
-                <span className="flex-shrink-0 text-xs text-green-600 font-medium px-3 py-2">
+                <span className="flex-shrink-0 text-xs text-gray-600 font-medium px-3 py-2">
                   Done
                 </span>
               )}

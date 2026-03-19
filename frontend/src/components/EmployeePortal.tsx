@@ -165,7 +165,6 @@ export default function EmployeePortal({ onBack }: Props) {
     fields: string[],
   ) => {
     setOverlayPhase("processing");
-    setInterimTranscript("");
 
     const isFirstRound = voiceRoundRef.current === 0;
     voiceRoundRef.current += 1;
@@ -331,6 +330,7 @@ export default function EmployeePortal({ onBack }: Props) {
       // Pre-fill corrected values in form
       if (!json.is_valid && json.corrected_request) {
         const c = json.corrected_request;
+        const userPreferred = (data.preferred_supplier || "").trim();
         setFormData({
           request_text: (c.request_text as string) || data.request_text,
           quantity: (c.quantity as number) ?? data.quantity,
@@ -339,7 +339,8 @@ export default function EmployeePortal({ onBack }: Props) {
           category_l2: (c.category_l2 as string) || data.category_l2,
           delivery_country: (c.delivery_country as string) || data.delivery_country,
           required_by_date: ((c.required_by_date as string) || data.required_by_date || "").split("T")[0],
-          preferred_supplier: (c.preferred_supplier as string) || data.preferred_supplier,
+          // Only keep/accept employee preference if they explicitly provided it.
+          preferred_supplier: userPreferred ? ((c.preferred_supplier as string) || data.preferred_supplier) : "",
           language: data.language,
         });
       }
@@ -465,7 +466,6 @@ export default function EmployeePortal({ onBack }: Props) {
           const transcript = interimTranscript.trim();
           if (transcript) {
             setOverlayPhase("processing");
-            setInterimTranscript("");
             // Send transcript to parse — missing fields callback will handle the flow
             forceTranscriptRef.current?.(transcript);
           } else {
@@ -486,24 +486,7 @@ export default function EmployeePortal({ onBack }: Props) {
         onSpeakingStart={handleSpeakingStart}
       />
 
-      <header className="bg-white border-b border-gray-200 px-6 py-4 print:hidden">
-        <div className="max-w-4xl mx-auto flex items-center gap-3">
-          <button onClick={onBack} className="text-gray-400 hover:text-gray-600 transition-colors mr-1">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">SP</span>
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900">Smart Procurement</h1>
-            <p className="text-sm text-gray-500">Employee Portal</p>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-4xl mx-auto py-8 px-6">
+      <main className="max-w-none w-full py-8 px-6">
         {/* Error */}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
@@ -517,7 +500,7 @@ export default function EmployeePortal({ onBack }: Props) {
         {/* Loading */}
         {(loading || submitLoading) && (
           <div className="flex flex-col items-center gap-4 py-16">
-            <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+            <div className="w-10 h-10 border-4 border-red-200 border-t-red-600 rounded-full animate-spin" />
             <p className="text-gray-600">
               {submitLoading ? "Submitting your request..." : i.analyzing}
             </p>
@@ -527,8 +510,8 @@ export default function EmployeePortal({ onBack }: Props) {
         {/* Phase: Submitted */}
         {!loading && !submitLoading && phase === "submitted" && submitted && (
           <div className="flex flex-col items-center gap-6 py-16">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">
-              <svg className="w-10 h-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center">
+              <svg className="w-10 h-10 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
@@ -547,7 +530,7 @@ export default function EmployeePortal({ onBack }: Props) {
             </div>
             <button
               onClick={handleNewRequest}
-              className="mt-2 bg-blue-600 text-white rounded-lg px-6 py-3 font-medium hover:bg-blue-700 transition-colors"
+              className="mt-2 bg-red-600 text-white rounded-lg px-6 py-3 font-medium hover:bg-red-700 transition-colors"
             >
               {i.newRequest}
             </button>
@@ -596,12 +579,17 @@ export default function EmployeePortal({ onBack }: Props) {
               showDemoSelector={true}
               submitLabel={i.validateRequest}
               onActivateVoiceOverlay={handleActivateVoice}
+              onDeactivateVoiceOverlay={handleOverlayClose}
               onInterimTranscriptChange={setInterimTranscript}
               overlayActive={overlayActive}
               onRegisterForceTranscript={(fn) => { forceTranscriptRef.current = fn; }}
               onMissingFieldsDetected={handleMissingFieldsFromOverlay}
               onListeningChange={handleListeningChange}
               onEmptyEnd={handleEmptyEnd}
+              onVoiceParseError={(msg) => {
+                setError(msg);
+                handleOverlayClose();
+              }}
             />
           </>
         )}

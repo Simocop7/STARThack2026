@@ -145,7 +145,6 @@ function EscalationCard({ esc }: { esc: Escalation }) {
   return (
     <div className={`border rounded-lg p-3 ${cls}`}>
       <div className="flex items-start gap-2">
-        <span className="text-base shrink-0 mt-0.5">{esc.blocking ? "🚫" : "⚠️"}</span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`font-mono text-xs font-bold ${textCls}`}>{esc.rule_id}</span>
@@ -222,7 +221,7 @@ function FeatureCard({
                   : "bg-orange-50 text-orange-700 border-orange-200"
               }`}
             >
-              {isFirst ? `${feature.icon} ${feature.label}` : `#${featureRank} ${feature.label}`}
+              {isFirst ? feature.label : `#${featureRank} ${feature.label}`}
             </span>
             <h3 className="text-xl font-semibold text-gray-900 leading-tight">
               {supplier.supplier_name}
@@ -233,17 +232,17 @@ function FeatureCard({
             <div className="flex gap-1 flex-wrap">
               {supplier.is_preferred && (
                 <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-blue-50 text-blue-700 border-blue-200">
-                  ⭐ Preferred
+                  Preferred
                 </span>
               )}
               {supplier.is_incumbent && (
                 <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-green-50 text-green-700 border-green-200">
-                  ✓ Incumbent
+                  Incumbent
                 </span>
               )}
               {!supplier.meets_lead_time && (
                 <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-red-50 text-red-700 border-red-200">
-                  ⏰ Lead time risk
+                  Lead time risk
                 </span>
               )}
             </div>
@@ -351,7 +350,7 @@ function FeatureCard({
                   {/* Expedited */}
                   {supplier.expedited_unit_price && (
                     <div className="bg-amber-50 rounded-lg px-3 py-2 text-xs text-amber-700">
-                      <span className="font-semibold">⚡ Expedited: </span>
+                      <span className="font-semibold">Expedited: </span>
                       {fmt(supplier.expedited_unit_price, currency)}/unit ·{" "}
                       <strong>{fmt(supplier.expedited_total_price ?? 0, currency)}</strong> ·{" "}
                       {supplier.expedited_lead_time_days}d · ≈+8%
@@ -381,7 +380,7 @@ function FeatureCard({
                 : "bg-gray-900 text-white hover:bg-gray-800"
             }`}
           >
-            ✓ Place Order
+            Select supplier
           </button>
         </div>
       </div>
@@ -433,7 +432,6 @@ function ScoringMethodology({ weights }: {
         className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
       >
         <span className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-          <span className="text-base">📐</span>
           Scoring Methodology
           <span className="text-xs font-normal text-gray-400">— how suppliers are ranked</span>
         </span>
@@ -490,7 +488,7 @@ function ScoringMethodology({ weights }: {
                 <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
                   {params.map((p) => (
                     <span key={p.key} className={`text-[10px] font-medium ${p.color}`}>
-                      {p.icon} {p.label}
+                      {p.label}
                     </span>
                   ))}
                 </div>
@@ -503,7 +501,6 @@ function ScoringMethodology({ weights }: {
                   {params.map((p) => (
                     <div key={p.key} className={`border rounded-lg px-4 py-3 ${p.bg}`}>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-base">{p.icon}</span>
                         <span className={`text-sm font-bold ${p.color}`}>{p.label}</span>
                         <span className="ml-auto text-xs font-bold text-gray-600 bg-white border border-gray-200 rounded-full px-2 py-0.5">
                           ×{(p.weight * 100).toFixed(0)}%
@@ -528,7 +525,7 @@ function ContactPlatforms() {
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
       <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
-        <span className="text-base">🔗</span>
+        <span className="text-base">Links</span>
         <span className="text-sm font-semibold text-gray-700">Contact Suppliers Directly</span>
         <span className="text-xs text-gray-400 ml-1">— via external procurement platforms</span>
       </div>
@@ -541,10 +538,10 @@ function ContactPlatforms() {
             rel="noopener noreferrer"
             className={`flex flex-col gap-1.5 border border-gray-200 rounded-xl p-3 transition-all bg-white ${p.color}`}
           >
-            <span className="text-xl">{p.icon}</span>
+            <span className="text-xl" aria-hidden="true" />
             <span className={`text-xs font-bold ${p.labelColor}`}>{p.name}</span>
             <span className="text-[10px] text-gray-500 leading-tight">{p.description}</span>
-            <span className="text-[10px] text-gray-400 mt-auto">Open ↗</span>
+            <span className="text-[10px] text-gray-400 mt-auto">Open</span>
           </a>
         ))}
       </div>
@@ -560,6 +557,7 @@ function ContactPlatforms() {
 export default function SupplierRankingView({ result, onNewRequest, onSelectSupplier, orderContext }: Props) {
   const [activeFeature, setActiveFeature] = useState<FeatureKey>("price");
   const [showExcluded, setShowExcluded] = useState(false);
+  const [showPolicyIssues, setShowPolicyIssues] = useState(false);
 
   const currency = result.currency || "EUR";
   const blockingEscalations = result.escalations.filter((e) => e.blocking);
@@ -567,6 +565,13 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
   const cheapestTotal = result.ranking.length > 0
     ? Math.min(...result.ranking.map((s) => s.total_price))
     : null;
+
+  const hasPolicyIssues = Boolean(
+    blockingEscalations.length > 0 ||
+      nonBlockingEscalations.length > 0 ||
+      (result.approval_threshold_id && result.approval_threshold_note) ||
+      (result.budget_sufficient === false && result.minimum_total_cost)
+  );
 
   const currentFeature = FEATURES.find((f) => f.key === activeFeature)!;
   const featureSorted = currentFeature.sort(result.ranking).slice(0, 3);
@@ -587,13 +592,92 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
             {cheapestTotal ? ` · From ${fmt(cheapestTotal, currency)}` : ""}
           </p>
         </div>
-        <button
-          onClick={onNewRequest}
-          className="text-sm text-blue-600 hover:text-blue-800 underline shrink-0"
-        >
-          ← New request
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {hasPolicyIssues && (
+            <button
+              onClick={() => setShowPolicyIssues(true)}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-200 bg-white/90 hover:bg-white transition-colors text-gray-700"
+              title="What policy checks failed or triggered escalations?"
+            >
+              Errors & escalations
+            </button>
+          )}
+          <button
+            onClick={onNewRequest}
+            className="text-sm text-blue-600 hover:text-blue-800 underline shrink-0"
+          >
+            ← New request
+          </button>
+        </div>
       </div>
+
+      {/* ── Policy issues modal ── */}
+      {showPolicyIssues && hasPolicyIssues && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[80] bg-black/60 flex items-start justify-center p-4"
+          onClick={() => setShowPolicyIssues(false)}
+        >
+          <div
+            className="w-full max-w-lg mt-16 rounded-xl bg-white border border-gray-200 shadow-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100">
+              <div>
+                <p className="text-sm font-bold text-gray-900">Policy issues</p>
+                <p className="text-xs text-gray-500">What triggered escalations / approval.</p>
+              </div>
+              <button
+                onClick={() => setShowPolicyIssues(false)}
+                className="text-gray-500 hover:text-gray-800 text-sm font-semibold px-2 py-1 rounded-md hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {blockingEscalations.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-xs font-bold text-red-700 uppercase tracking-wider">Blocking escalations</h3>
+                  {blockingEscalations.map((e, i) => (
+                    <EscalationCard key={i} esc={e} />
+                  ))}
+                </div>
+              )}
+
+              {result.approval_threshold_id && result.approval_threshold_note && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+                  <p className="text-sm font-semibold text-indigo-900">
+                    Approval needed: {result.approval_threshold_id}
+                  </p>
+                  <p className="text-sm text-indigo-700 mt-0.5">{result.approval_threshold_note}</p>
+                </div>
+              )}
+
+              {result.budget_sufficient === false && result.minimum_total_cost && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                  <p className="font-semibold text-amber-800">Budget insufficient</p>
+                  <p className="text-sm text-amber-700 mt-0.5">
+                    Minimum cost is <strong>{fmt(result.minimum_total_cost, currency)}</strong>
+                    {result.minimum_cost_supplier && ` (${result.minimum_cost_supplier})`}.
+                    A budget increase is required to proceed.
+                  </p>
+                </div>
+              )}
+
+              {nonBlockingEscalations.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-xs font-bold text-amber-700 uppercase tracking-wider">Escalations (non-blocking)</h3>
+                  {nonBlockingEscalations.map((e, i) => (
+                    <EscalationCard key={i} esc={e} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Order context banner ── */}
       {orderContext && (orderContext.category_l1 || orderContext.quantity) && (
@@ -632,50 +716,7 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
         </div>
       )}
 
-      {/* ── Blocking escalations ── */}
-      {blockingEscalations.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-xs font-bold text-red-700 uppercase tracking-wider">🚫 Blocking Escalations</h3>
-          {blockingEscalations.map((e, i) => <EscalationCard key={i} esc={e} />)}
-        </div>
-      )}
-
-      {/* ── Approval threshold ── */}
-      {result.approval_threshold_id && result.approval_threshold_note && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex items-start gap-3">
-          <div className="w-7 h-7 bg-indigo-100 rounded-full flex items-center justify-center shrink-0">
-            <span className="text-indigo-700 text-sm font-bold">✓</span>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-indigo-900">Approval: {result.approval_threshold_id}</p>
-            <p className="text-sm text-indigo-700 mt-0.5">{result.approval_threshold_note}</p>
-          </div>
-        </div>
-      )}
-
-      {/* ── Budget warning ── */}
-      {result.budget_sufficient === false && result.minimum_total_cost && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
-          <span className="text-xl shrink-0">⚠️</span>
-          <div>
-            <p className="font-semibold text-amber-800">Budget insufficient</p>
-            <p className="text-sm text-amber-700 mt-0.5">
-              Minimum cost is{" "}
-              <strong>{fmt(result.minimum_total_cost, currency)}</strong>
-              {result.minimum_cost_supplier && ` (${result.minimum_cost_supplier})`}.
-              A budget increase is required to proceed.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* ── Non-blocking escalations ── */}
-      {nonBlockingEscalations.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-xs font-bold text-amber-700 uppercase tracking-wider">⚠️ Escalations (non-blocking)</h3>
-          {nonBlockingEscalations.map((e, i) => <EscalationCard key={i} esc={e} />)}
-        </div>
-      )}
+      {/* Policy issues moved to modal (Errors & escalations) */}
 
       {/* ── Section 1: Feature buttons + animated top-3 cards ── */}
       {result.ranking.length > 0 && (
@@ -694,7 +735,6 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
                       : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                   }`}
                 >
-                  <span className="text-base leading-none">{f.icon}</span>
                   {f.label}
                   {isActive && <span className="text-[10px] opacity-80 hidden sm:inline">— {f.tagline}</span>}
                 </button>
@@ -705,7 +745,7 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
           {/* Feature label */}
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-gray-700">
-              {currentFeature.icon} Top 3 — {currentFeature.label}
+              Top 3 — {currentFeature.label}
             </span>
             <span className="text-xs text-gray-400">{currentFeature.tagline}</span>
           </div>
@@ -739,11 +779,11 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
       {result.ranking.length === 0 && (
         <div className="text-center py-16 bg-white border border-dashed border-gray-300 rounded-2xl">
           <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl">🔍</span>
+                <span className="text-2xl">Search</span>
           </div>
           <h3 className="text-gray-700 font-semibold">No suppliers found</h3>
           <p className="text-sm text-gray-400 mt-1 max-w-xs mx-auto">
-            All candidates were excluded by hard policy filters. Check the escalations above for details.
+            All candidates were excluded by hard policy filters. Open <span className="font-semibold">Errors & escalations</span> for details.
           </p>
         </div>
       )}

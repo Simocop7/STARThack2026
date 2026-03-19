@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { VoicePoweredOrb } from "./ui/voice-powered-orb";
 
 type OverlayPhase = "listening" | "processing" | "speaking" | "closing";
 
@@ -20,15 +21,12 @@ export default function VoiceOverlay({
   onClose,
   onStopListening,
 }: Props) {
-  const orbRef = useRef<HTMLElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
 
-  // Bridge volume level to CSS custom property for listening state
-  useEffect(() => {
-    if (orbRef.current && phase === "listening") {
-      orbRef.current.style.setProperty("--volume", volumeLevel.toFixed(3));
-    }
-  }, [volumeLevel, phase]);
+  const orbExternalVolume = useMemo(() => {
+    if (phase !== "listening") return 0;
+    return Math.max(0, Math.min(1, volumeLevel));
+  }, [phase, volumeLevel]);
 
   // Handle closing animation
   useEffect(() => {
@@ -39,13 +37,6 @@ export default function VoiceOverlay({
   }, [phase]);
 
   if (!active) return null;
-
-  const orbClass =
-    phase === "listening"
-      ? "voice-orb-listening"
-      : phase === "speaking"
-        ? "voice-orb-speaking"
-        : "voice-orb-processing";
 
   const statusText =
     phase === "listening"
@@ -63,7 +54,7 @@ export default function VoiceOverlay({
       style={{ animation: "overlayFadeIn 300ms ease-out" }}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-900/95 via-indigo-950/95 to-violet-950/95 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-gradient-to-br from-black/95 via-red-950/85 to-black/95 backdrop-blur-sm" />
 
       {/* Close button */}
       <button
@@ -82,7 +73,7 @@ export default function VoiceOverlay({
         {phase === "listening" && (
           <>
             <div
-              className="absolute rounded-full border border-indigo-400/20"
+              className="absolute rounded-full border border-red-400/20"
               style={{
                 width: 280,
                 height: 280,
@@ -90,7 +81,7 @@ export default function VoiceOverlay({
               }}
             />
             <div
-              className="absolute rounded-full border border-violet-400/15"
+              className="absolute rounded-full border border-red-300/15"
               style={{
                 width: 280,
                 height: 280,
@@ -98,7 +89,7 @@ export default function VoiceOverlay({
               }}
             />
             <div
-              className="absolute rounded-full border border-purple-400/10"
+              className="absolute rounded-full border border-rose-300/10"
               style={{
                 width: 280,
                 height: 280,
@@ -116,8 +107,8 @@ export default function VoiceOverlay({
               width: 270,
               height: 270,
               border: "3px solid transparent",
-              borderTopColor: "rgba(139, 92, 246, 0.8)",
-              borderRightColor: "rgba(99, 102, 241, 0.4)",
+              borderTopColor: "rgba(239, 68, 68, 0.85)",
+              borderRightColor: "rgba(220, 38, 38, 0.4)",
               animation: "processingRing 1.2s linear infinite",
             }}
           />
@@ -127,16 +118,26 @@ export default function VoiceOverlay({
         {phase === "listening" && onStopListening ? (
           <button
             type="button"
-            ref={orbRef as React.RefObject<HTMLButtonElement | null>}
             onClick={onStopListening}
-            className={`w-60 h-60 rounded-full ${orbClass} cursor-pointer border-0 outline-none`}
+            className="w-60 h-60 rounded-full overflow-hidden cursor-pointer border-0 outline-none bg-transparent p-0"
             title="Tap to finish"
-          />
+          >
+            <VoicePoweredOrb
+              enableVoiceControl
+              externalVolumeLevel={orbExternalVolume}
+              hue={0}
+              className="w-full h-full"
+            />
+          </button>
         ) : (
-          <div
-            ref={orbRef as React.RefObject<HTMLDivElement | null>}
-            className={`w-60 h-60 rounded-full ${orbClass}`}
-          />
+          <div className="w-60 h-60 rounded-full overflow-hidden bg-transparent">
+            <VoicePoweredOrb
+              enableVoiceControl={phase === "listening"}
+              externalVolumeLevel={orbExternalVolume}
+              hue={0}
+              className="w-full h-full"
+            />
+          </div>
         )}
 
         {/* Status label */}
@@ -146,7 +147,7 @@ export default function VoiceOverlay({
           </p>
 
           {/* Interim transcript */}
-          {phase === "listening" && interimTranscript && (
+          {phase !== "closing" && interimTranscript && (
             <p
               className="text-sm text-white/50 max-w-md text-center italic"
               style={{ animation: "transcriptIn 200ms ease-out" }}

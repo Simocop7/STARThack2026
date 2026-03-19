@@ -1,16 +1,19 @@
 import { useState } from "react";
 import HeroPage from "./components/HeroPage";
 import EmployeePortal from "./components/EmployeePortal";
+import EmployeeRequestsHistory from "./components/EmployeeRequestsHistory";
 import ProcurementPortal from "./components/ProcurementPortal";
 import AppShell from "./components/AppShell";
 
 type Role = "employee" | "office";
 type OfficeView = "inbox" | "process";
+type EmployeeView = "new-request" | "history";
 
 export default function App() {
   const [showHero,   setShowHero]   = useState(true);
   const [role,       setRole]       = useState<Role>("employee");
   const [officeView, setOfficeView] = useState<OfficeView>("inbox");
+  const [employeeView, setEmployeeView] = useState<EmployeeView>("new-request");
   const [empKey,     setEmpKey]     = useState(0);
 
   // ── Hero entry ──────────────────────────────────────────────────
@@ -25,8 +28,10 @@ export default function App() {
     setRole(newRole);
     if (newRole === "office") {
       setOfficeView(view as OfficeView);
-    } else if (newRole === "employee" && view === "new-request") {
-      setEmpKey((k) => k + 1);
+    }
+    if (newRole === "employee") {
+      setEmployeeView(view as EmployeeView);
+      if (view === "new-request") setEmpKey((k) => k + 1);
     }
   };
 
@@ -35,12 +40,17 @@ export default function App() {
   return (
     <AppShell
       role={role}
+      employeeView={employeeView}
       officeView={officeView}
       onNavigate={handleNavigate}
       onSwitchRole={handleSwitchRole}
     >
       {role === "employee" ? (
-        <EmployeePortal key={empKey} onBack={() => handleSwitchRole()} />
+        employeeView === "new-request" ? (
+          <EmployeePortal key={empKey} onBack={() => handleSwitchRole()} />
+        ) : (
+          <EmployeeRequestsHistory />
+        )
       ) : (
         <ProcurementPortal
           onBack={() => handleSwitchRole()}
