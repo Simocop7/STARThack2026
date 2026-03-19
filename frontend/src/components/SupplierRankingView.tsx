@@ -437,6 +437,15 @@ function computeWinners(ranking: ScoredSupplier[]): Map<string, ParamKey[]> {
 
 // ── Best-in-category card ───────────────────────────────────────────
 
+// Short labels for the compact score accordion
+const SCORE_LABEL: Record<ParamKey, string> = {
+  price: "Price",
+  quality: "Quality",
+  risk: "Trustworthiness",
+  esg: "ESG",
+  lead_time: "Delivery",
+};
+
 function BestInCategoryCard({
   supplier,
   wonParams,
@@ -448,29 +457,34 @@ function BestInCategoryCard({
   currency: string;
   onSelect: (s: ScoredSupplier) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const isOverall = supplier.rank === 1;
+  const [showScores, setShowScores] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
-  // meta for each won param
+  const isOverall = supplier.rank === 1;
   const wonMeta = PARAMS.filter((p) => wonParams.includes(p.key));
-  // use first won param for the accent colour
   const accent = wonMeta[0];
+  const sb = supplier.score_breakdown;
+  const raw = supplier.raw_scores;
+
+  function handleConfirm() {
+    setConfirming(true);
+    onSelect(supplier);
+  }
 
   return (
     <div
-      className={`border-2 rounded-xl bg-white overflow-hidden transition-shadow hover:shadow-md ${
-        isOverall ? "border-blue-400 shadow-blue-50 shadow-sm" : accent.borderCls
+      className={`border-2 rounded-xl bg-white overflow-hidden transition-shadow hover:shadow-md flex flex-col ${
+        isOverall ? "border-blue-400 shadow-blue-100 shadow-sm" : accent.borderCls
       }`}
     >
-      {/* Top accent bar with won-param badges */}
-      <div className={`px-4 py-2 flex items-center gap-2 flex-wrap ${isOverall ? "bg-blue-600" : accent.bgCls}`}>
-        {isOverall && (
-          <span className={`text-xs font-bold text-white mr-1`}>⭐ Overall Best ·</span>
-        )}
+      {/* ── Won-param badges ── */}
+      <div className={`px-3 py-2 flex items-center gap-1.5 flex-wrap ${isOverall ? "bg-blue-600" : accent.bgCls}`}>
+        {isOverall && <span className="text-xs font-bold text-white shrink-0">⭐ Overall Best ·</span>}
         {wonMeta.map((pm) => (
           <span
             key={pm.key}
-            className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${
+            className={`inline-flex items-center gap-0.5 text-xs font-semibold px-2 py-0.5 rounded-full border ${
               isOverall ? "bg-white/20 text-white border-white/30" : pm.tagCls + " border-transparent"
             }`}
           >
@@ -479,189 +493,206 @@ function BestInCategoryCard({
         ))}
       </div>
 
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 pt-3 pb-2">
+      {/* ── Name + score ── */}
+      <div className="flex items-start gap-3 px-4 pt-3 pb-2">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-gray-900 text-base">{supplier.supplier_name}</span>
+          <p className="font-bold text-gray-900 text-base leading-snug">{supplier.supplier_name}</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">
+            {supplier.supplier_id} · {fmtTier(supplier.pricing_tier_applied)}
+          </p>
+          <div className="flex gap-1 mt-1.5 flex-wrap">
             {supplier.is_preferred && (
-              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">Preferred</span>
+              <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">Preferred</span>
             )}
             {supplier.is_incumbent && (
-              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Incumbent</span>
+              <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold">Incumbent</span>
             )}
             {!supplier.meets_lead_time && (
-              <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">⏰ Lead time risk</span>
+              <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-semibold">⏰ Lead time risk</span>
             )}
           </div>
-          <p className="text-xs text-gray-400 mt-0.5">{supplier.supplier_id} · Tier: {fmtTier(supplier.pricing_tier_applied)}</p>
         </div>
-        <CompositeRing score={supplier.composite_score} />
+        <div className="shrink-0 flex flex-col items-center">
+          <span className={`text-3xl font-black leading-none ${
+            Math.round(supplier.composite_score * 100) >= 75 ? "text-green-600"
+            : Math.round(supplier.composite_score * 100) >= 50 ? "text-amber-600"
+            : "text-red-600"
+          }`}>
+            {Math.round(supplier.composite_score * 100)}
+          </span>
+          <span className="text-[10px] text-gray-400 font-medium">/ 100</span>
+        </div>
       </div>
 
-      {/* All parameters — won ones highlighted, others shown for comparison */}
-      <div className="mx-4 mb-3 space-y-1.5">
-        {PARAMS.map((pm) => {
-          const isWon = wonParams.includes(pm.key);
-
-          const barPct =
-            pm.key === "price" ? Math.round(supplier.score_breakdown.price_score * 100)
-            : pm.key === "quality" ? supplier.raw_scores.quality
-            : pm.key === "risk" ? 100 - supplier.raw_scores.risk   // trust = 100 - risk, full bar = most trustworthy
-            : pm.key === "esg" ? supplier.raw_scores.esg
-            : Math.round(supplier.score_breakdown.lead_time_score * 100);
-
-          const displayNum =
-            pm.key === "lead_time" ? `${supplier.standard_lead_time_days}d`
-            : pm.key === "price" ? `${Math.round(supplier.score_breakdown.price_score * 100)}`
-            : pm.key === "risk" ? `${100 - supplier.raw_scores.risk}`   // display trustworthiness, not raw risk
-            : pm.key === "quality" ? `${supplier.raw_scores.quality}`
-            : `${supplier.raw_scores.esg}`;
-
-          const displayHint =
-            pm.key === "price" ? "100 = cheapest, others proportional"
-            : pm.key === "lead_time" ? "actual days"
-            : undefined;
-
-          return (
-            <div
-              key={pm.key}
-              className={`rounded-lg px-3 py-2 border ${
-                isWon ? `${pm.bgCls} ${pm.borderCls.replace("300", "200")}` : "bg-gray-50 border-gray-100"
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className={`text-xs font-${isWon ? "bold" : "medium"} flex items-center gap-1 ${
-                  isWon ? pm.tagCls.split(" ")[1] : "text-gray-400"
-                }`}>
-                  {pm.icon} {pm.label}
-                  {isWon && <span className="text-[9px] font-bold tracking-wide">★ BEST</span>}
-                </span>
-                <span className={`text-xs font-medium ${isWon ? "text-gray-700" : "text-gray-400"}`}>
-                  {pm.displayValue(supplier, currency)}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className={`flex-1 rounded-full h-1.5 ${isWon ? "bg-white/70" : "bg-gray-200"}`}>
-                  <div
-                    className={`h-1.5 rounded-full ${isWon ? pm.barColor : "bg-gray-300"}`}
-                    style={{ width: `${Math.min(100, Math.max(0, barPct))}%` }}
-                  />
-                </div>
-                <span className={`text-xs font-semibold w-8 text-right ${isWon ? "text-gray-700" : "text-gray-400"}`}>
-                  {displayNum}
-                </span>
-                {displayHint && isWon && <span className="text-[10px] text-gray-400 w-16">{displayHint}</span>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Pricing strip */}
-      <div className="grid grid-cols-3 gap-px bg-gray-100 border-t border-gray-100">
-        <div className="bg-white px-4 py-2.5">
-          <p className="text-xs text-gray-400 mb-0.5">Unit price</p>
-          <p className="font-bold text-gray-900">{fmt(supplier.unit_price, currency)}</p>
+      {/* ── 3 key metrics ── */}
+      <div className="grid grid-cols-3 gap-px bg-gray-100 border-t border-b border-gray-100">
+        <div className="bg-white px-3 py-2.5">
+          <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">Unit</p>
+          <p className="font-bold text-gray-900 text-sm">{fmt(supplier.unit_price, currency)}</p>
         </div>
-        <div className="bg-white px-4 py-2.5">
-          <p className="text-xs text-gray-400 mb-0.5">Total cost</p>
-          <p className="font-bold text-gray-900">{fmt(supplier.total_price, currency)}</p>
+        <div className="bg-white px-3 py-2.5">
+          <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">Total</p>
+          <p className="font-bold text-gray-900 text-sm">{fmt(supplier.total_price, currency)}</p>
         </div>
-        <div className="bg-white px-4 py-2.5">
-          <p className="text-xs text-gray-400 mb-0.5">Lead time</p>
-          <p className="font-bold text-gray-900">
+        <div className="bg-white px-3 py-2.5">
+          <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">Delivery</p>
+          <p className="font-bold text-gray-900 text-sm">
             {supplier.standard_lead_time_days}d
             {supplier.expedited_lead_time_days && (
-              <span className="text-xs text-gray-400 font-normal"> / {supplier.expedited_lead_time_days}d exp.</span>
+              <span className="text-[10px] text-gray-400 font-normal"> /{supplier.expedited_lead_time_days}d</span>
             )}
           </p>
         </div>
       </div>
 
-      {/* Select button */}
-      <div className="px-4 py-3 border-t border-gray-100">
+      {/* ── Confirm order button ── */}
+      <div className="px-4 py-3">
         <button
-          onClick={() => onSelect(supplier)}
-          className={`w-full rounded-lg py-2.5 text-sm font-semibold transition-colors ${
-            isOverall
-              ? "bg-blue-600 text-white hover:bg-blue-700"
-              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+          onClick={handleConfirm}
+          disabled={confirming}
+          className={`w-full rounded-xl py-3 text-sm font-bold tracking-wide transition-all ${
+            confirming
+              ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+              : isOverall
+              ? "bg-blue-600 text-white hover:bg-blue-700 active:scale-[0.98] shadow-sm shadow-blue-200"
+              : "bg-gray-900 text-white hover:bg-gray-800 active:scale-[0.98]"
           }`}
         >
-          {isOverall ? "✓ Select Recommended Supplier" : "Select this Supplier"}
+          {confirming ? "Placing order…" : isOverall ? "✓ Confirm & Place Order" : "Place Order"}
         </button>
       </div>
 
-      {/* Expandable compliance */}
+      {/* ── Accordion 1: Scores ── */}
       <div className="border-t border-gray-100">
         <button
-          onClick={() => setExpanded((v) => !v)}
-          className="w-full px-4 py-2.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 text-left flex items-center justify-between"
+          onClick={() => setShowScores((v) => !v)}
+          className="w-full px-4 py-2.5 flex items-center justify-between text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
         >
-          <span className="flex items-center gap-2 font-medium">
-            <span className="text-gray-400">{expanded ? "▲" : "▼"}</span>
-            {expanded ? "Hide" : "Show"} compliance checks &amp; rationale
+          <span className="flex items-center gap-1.5">
+            <span>📊</span> Scores
           </span>
-          {!expanded && (
-            <span className="flex items-center gap-1.5">
-              {["pass", "warning", "fail"].map((r) => {
-                const count = supplier.compliance_checks.filter((c) => c.result === r).length;
-                if (!count) return null;
-                const cfg = r === "pass"
-                  ? { cls: "bg-green-100 text-green-700", label: "✓" }
-                  : r === "warning"
-                  ? { cls: "bg-amber-100 text-amber-700", label: "⚠" }
-                  : { cls: "bg-red-100 text-red-700", label: "✗" };
-                return (
-                  <span key={r} className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${cfg.cls}`}>
-                    {cfg.label} {count}
-                  </span>
-                );
-              })}
-            </span>
-          )}
+          <span className="text-gray-400 text-[10px]">{showScores ? "▲" : "▼"}</span>
         </button>
-        {expanded && (
+
+        {showScores && (
+          <div className="px-4 pb-4 pt-1 space-y-2.5">
+            {PARAMS.map((pm) => {
+              const isWon = wonParams.includes(pm.key);
+
+              const barPct =
+                pm.key === "price" ? Math.round(sb.price_score * 100)
+                : pm.key === "quality" ? raw.quality
+                : pm.key === "risk" ? 100 - raw.risk
+                : pm.key === "esg" ? raw.esg
+                : Math.round(sb.lead_time_score * 100);
+
+              const displayVal =
+                pm.key === "lead_time"
+                  ? `${supplier.standard_lead_time_days}d${supplier.expedited_lead_time_days ? ` / ${supplier.expedited_lead_time_days}d` : ""}`
+                  : pm.key === "price" ? `${Math.round(sb.price_score * 100)}`
+                  : pm.key === "risk" ? `${100 - raw.risk}`
+                  : pm.key === "quality" ? `${raw.quality}`
+                  : `${raw.esg}`;
+
+              return (
+                <div key={pm.key} className="flex items-center gap-2">
+                  <span className={`text-xs w-[90px] shrink-0 font-${isWon ? "semibold" : "normal"} ${
+                    isWon ? pm.tagCls.split(" ")[1] : "text-gray-400"
+                  }`}>
+                    {pm.icon} {SCORE_LABEL[pm.key]}
+                    {isWon && <span className="ml-0.5 text-[9px]">★</span>}
+                  </span>
+                  <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full transition-all ${isWon ? pm.barColor : "bg-gray-300"}`}
+                      style={{ width: `${Math.min(100, Math.max(0, barPct))}%` }}
+                    />
+                  </div>
+                  <span className={`text-xs font-semibold w-12 text-right ${isWon ? "text-gray-800" : "text-gray-400"}`}>
+                    {displayVal}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Accordion 2: Rationale & compliance ── */}
+      <div className="border-t border-gray-100">
+        <button
+          onClick={() => setShowDetails((v) => !v)}
+          className="w-full px-4 py-2.5 flex items-center justify-between text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+        >
+          <span className="flex items-center gap-1.5">
+            <span>📋</span> Rationale &amp; Compliance
+            {/* compact pass/fail summary when collapsed */}
+            {!showDetails && (
+              <span className="flex items-center gap-1 ml-1">
+                {(["pass", "warning", "fail"] as const).map((r) => {
+                  const count = supplier.compliance_checks.filter((c) => c.result === r).length;
+                  if (!count) return null;
+                  const cls = r === "pass" ? "bg-green-100 text-green-700"
+                    : r === "warning" ? "bg-amber-100 text-amber-700"
+                    : "bg-red-100 text-red-700";
+                  const icon = r === "pass" ? "✓" : r === "warning" ? "⚠" : "✗";
+                  return (
+                    <span key={r} className={`text-[10px] font-bold px-1 py-0.5 rounded ${cls}`}>
+                      {icon}{count}
+                    </span>
+                  );
+                })}
+              </span>
+            )}
+          </span>
+          <span className="text-gray-400 text-[10px]">{showDetails ? "▲" : "▼"}</span>
+        </button>
+
+        {showDetails && (
           <div className="px-4 pb-4 space-y-3">
-            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
-              <p className="text-xs font-semibold text-blue-700 mb-1">Audit Rationale</p>
-              <p className="text-xs text-blue-800 leading-relaxed">{supplier.recommendation_note}</p>
+            {/* Rationale — styled as a quote */}
+            <div className="border-l-4 border-blue-400 pl-3 py-1">
+              <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wide mb-1">Why this supplier?</p>
+              <p className="text-xs text-gray-700 leading-relaxed">{supplier.recommendation_note}</p>
             </div>
-            <div className="space-y-2">
+
+            {/* Compliance checks — compact rows */}
+            <div className="space-y-1.5">
               {supplier.compliance_checks.map((c, idx) => {
-                const cfg =
-                  c.result === "pass"
-                    ? { border: "border-green-200 bg-green-50", badge: "bg-green-100 text-green-700", icon: "✓", label: "Pass" }
-                    : c.result === "fail"
-                    ? { border: "border-red-200 bg-red-50", badge: "bg-red-100 text-red-700", icon: "✗", label: "Fail" }
-                    : c.result === "warning"
-                    ? { border: "border-amber-200 bg-amber-50", badge: "bg-amber-100 text-amber-700", icon: "⚠", label: "Warning" }
-                    : { border: "border-gray-200 bg-gray-50", badge: "bg-gray-100 text-gray-500", icon: "–", label: "N/A" };
+                const icon = c.result === "pass" ? "✓" : c.result === "fail" ? "✗" : c.result === "warning" ? "⚠" : "–";
+                const textCls = c.result === "pass" ? "text-green-700"
+                  : c.result === "fail" ? "text-red-700"
+                  : c.result === "warning" ? "text-amber-700"
+                  : "text-gray-500";
+                const bgCls = c.result === "pass" ? "bg-green-50"
+                  : c.result === "fail" ? "bg-red-50"
+                  : c.result === "warning" ? "bg-amber-50"
+                  : "bg-gray-50";
                 return (
-                  <div key={idx} className={`border rounded-lg p-3 ${cfg.border}`}>
-                    <div className="flex items-start gap-2">
-                      <span className={`text-xs font-bold px-1.5 py-0.5 rounded shrink-0 ${cfg.badge}`}>
-                        {cfg.icon} {cfg.label}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-gray-800">{c.rule_description}</p>
-                        <p className="text-xs text-gray-600 mt-0.5">{c.detail}</p>
-                        <span className="text-[10px] font-mono text-gray-400">{c.rule_id}</span>
-                      </div>
+                  <div key={idx} className={`flex items-start gap-2 rounded-lg px-2.5 py-2 ${bgCls}`}>
+                    <span className={`text-xs font-bold shrink-0 mt-px ${textCls}`}>{icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-semibold leading-snug ${textCls}`}>{c.rule_description}</p>
+                      {c.detail && (
+                        <p className="text-[10px] text-gray-500 mt-0.5 leading-snug">{c.detail}</p>
+                      )}
                     </div>
+                    <span className="text-[9px] font-mono text-gray-300 shrink-0">{c.rule_id}</span>
                   </div>
                 );
               })}
             </div>
+
+            {/* Expedited option */}
             {supplier.expedited_unit_price && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-xs text-amber-800">
-                <p className="font-semibold mb-0.5">⚡ Expedited delivery available</p>
-                <p>
-                  {fmt(supplier.expedited_unit_price, currency)}/unit →{" "}
-                  <strong>{fmt(supplier.expedited_total_price!, currency)}</strong> total
-                  {" "}({supplier.expedited_lead_time_days}d, ≈+8% premium)
-                </p>
+              <div className="flex items-start gap-2 bg-amber-50 rounded-lg px-3 py-2.5">
+                <span className="text-sm shrink-0">⚡</span>
+                <div>
+                  <p className="text-xs font-semibold text-amber-800">Expedited available</p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    {fmt(supplier.expedited_unit_price, currency)}/unit · <strong>{fmt(supplier.expedited_total_price!, currency)}</strong> total · {supplier.expedited_lead_time_days}d · ≈+8%
+                  </p>
+                </div>
               </div>
             )}
           </div>
