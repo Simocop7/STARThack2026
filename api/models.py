@@ -175,6 +175,13 @@ class EnrichedRequest(BaseModel):
     data_residency_required: bool = False
     esg_requirement: bool = False
     urgency: str = "normal"  # normal, high, critical
+
+    @field_validator("urgency")
+    @classmethod
+    def validate_urgency(cls, v: str) -> str:
+        if v not in ("normal", "high", "critical"):
+            return "normal"
+        return v
     additional_specs: str = ""
     detected_language: str = "en"
     text_quantity_mentioned: Optional[int] = None

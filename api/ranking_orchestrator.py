@@ -106,3 +106,14 @@ async def get_top_5_suppliers(
                 "method_used": RankingMethod.HYBRID,
             }
         )
+    except Exception:
+        logger.exception(
+            "Unexpected error in LLM fallback for %s — returning deterministic result.",
+            order.request_id,
+        )
+        return det_result.model_copy(
+            update={
+                "llm_fallback_reason": f"Unexpected error in LLM fallback: {reason}",
+                "method_used": RankingMethod.HYBRID,
+            }
+        )

@@ -4,20 +4,37 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "ChainIQ-START-Hack-2026-" / "data"
 
+logger = logging.getLogger(__name__)
+
 
 def _read_csv(filename: str) -> list[dict[str, str]]:
-    with open(DATA_DIR / filename, newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
+    try:
+        with open(DATA_DIR / filename, newline="", encoding="utf-8") as f:
+            return list(csv.DictReader(f))
+    except FileNotFoundError:
+        logger.error("Data file not found: %s — returning empty list.", DATA_DIR / filename)
+        return []
+    except (OSError, UnicodeDecodeError) as exc:
+        logger.error("Failed to read CSV %s: %s — returning empty list.", filename, exc)
+        return []
 
 
 def _read_json(filename: str) -> Any:
-    with open(DATA_DIR / filename, encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(DATA_DIR / filename, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.error("Data file not found: %s — returning empty dict.", DATA_DIR / filename)
+        return {}
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        logger.error("Failed to read JSON %s: %s — returning empty dict.", filename, exc)
+        return {}
 
 
 # ---------------------------------------------------------------------------
