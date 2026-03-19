@@ -38,13 +38,9 @@ def check_supplier(
                 issue_id=f"SUP-{counter:03d}",
                 severity=Severity.HIGH,
                 type=IssueType.CATEGORY_MISMATCH,
-                description=(
-                    f"Supplier '{sup_name}' ({sup_id}) does not operate in "
-                    f"category {cat_l1} > {cat_l2}."
-                ),
+                description=(f"Supplier '{sup_name}' ({sup_id}) does not operate in category {cat_l1} > {cat_l2}."),
                 proposed_fix=(
-                    f"Consider one of these suppliers for {cat_l1} > {cat_l2}: "
-                    f"{', '.join(alt_names)}."
+                    f"Consider one of these suppliers for {cat_l1} > {cat_l2}: {', '.join(alt_names)}."
                     if alt_names
                     else f"No suppliers found for {cat_l1} > {cat_l2}."
                 ),
@@ -61,11 +57,7 @@ def check_supplier(
     if country and country not in supplier_row["service_regions"]:
         counter += 1
         covered = suppliers_by_category.get((cat_l1, cat_l2), [])
-        alt_for_country = [
-            s["supplier_name"]
-            for s in covered
-            if country in s["service_regions"]
-        ][:5]
+        alt_for_country = [s["supplier_name"] for s in covered if country in s["service_regions"]][:5]
         issues.append(
             ValidationIssue(
                 issue_id=f"SUP-{counter:03d}",
@@ -76,8 +68,7 @@ def check_supplier(
                     f"'{country}'. They serve: {', '.join(supplier_row['service_regions'])}."
                 ),
                 proposed_fix=(
-                    f"Suppliers covering {country} for {cat_l2}: "
-                    f"{', '.join(alt_for_country)}."
+                    f"Suppliers covering {country} for {cat_l2}: {', '.join(alt_for_country)}."
                     if alt_for_country
                     else f"No suppliers cover {country} for {cat_l2}."
                 ),
@@ -118,8 +109,7 @@ def check_supplier(
                 severity=Severity.HIGH,
                 type=IssueType.RESTRICTED_SUPPLIER,
                 description=(
-                    f"Supplier '{sup_name}' is RESTRICTED for {cat_l2} "
-                    f"in {country or 'this scope'}. Reason: {reason}"
+                    f"Supplier '{sup_name}' is RESTRICTED for {cat_l2} in {country or 'this scope'}. Reason: {reason}"
                 ),
                 proposed_fix=(
                     f"Alternative suppliers: {', '.join(alt_names)}."
@@ -135,11 +125,7 @@ def check_supplier(
         )
 
     # --- Capacity check ---
-    if (
-        supplier_row
-        and enriched.quantity
-        and enriched.quantity > supplier_row["capacity_per_month"]
-    ):
+    if supplier_row and enriched.quantity and enriched.quantity > supplier_row["capacity_per_month"]:
         counter += 1
         cap = supplier_row["capacity_per_month"]
         issues.append(
@@ -148,13 +134,9 @@ def check_supplier(
                 severity=Severity.MEDIUM,
                 type=IssueType.CAPACITY_EXCEEDED,
                 description=(
-                    f"Requested quantity ({enriched.quantity}) exceeds "
-                    f"'{sup_name}' monthly capacity ({cap})."
+                    f"Requested quantity ({enriched.quantity}) exceeds '{sup_name}' monthly capacity ({cap})."
                 ),
-                proposed_fix=(
-                    f"Reduce quantity to {cap} or split the order across "
-                    f"multiple suppliers/months."
-                ),
+                proposed_fix=(f"Reduce quantity to {cap} or split the order across multiple suppliers/months."),
                 fix_action=FixAction(
                     field="quantity",
                     suggested_value=str(cap),

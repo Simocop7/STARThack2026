@@ -9,7 +9,6 @@ from typing import Any
 from api.azure_client import get_azure_client
 from api.models import EnrichedRequest, UserMessage, UserMessageIssue, ValidationIssue
 
-
 _SYSTEM_PROMPT = """You are a procurement assistant. Your job is to communicate validation results to the user in a clear, friendly, professional tone.
 
 INSTRUCTIONS:
@@ -106,7 +105,7 @@ Generate the user message using the generate_message function."""
             {"role": "user", "content": user_msg},
         ],
         tools=[_TOOL_SCHEMA],
-        tool_choice={"type": "function", "function": {"name": "generate_message"}},
+        tool_choice={"type": "function", "function": {"name": "generate_message"}},  # type: ignore[call-overload]
     )
 
     message = response.choices[0].message

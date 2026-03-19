@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from api.models import EnrichedRequest, FixAction, FormInput, IssueType, Severity, ValidationIssue
+from api.models import (
+    EnrichedRequest,
+    FixAction,
+    FormInput,
+    IssueType,
+    Severity,
+    ValidationIssue,
+)
 
 
 def check_contradictions(
@@ -28,14 +35,8 @@ def check_contradictions(
                 issue_id=f"CTR-{counter:03d}",
                 severity=Severity.HIGH,
                 type=IssueType.CONTRADICTORY,
-                description=(
-                    f"The text mentions {text_qty} units but the quantity "
-                    f"field says {form_qty}."
-                ),
-                proposed_fix=(
-                    f"Which quantity is correct? The text says {text_qty}, "
-                    f"the form says {form_qty}."
-                ),
+                description=(f"The text mentions {text_qty} units but the quantity field says {form_qty}."),
+                proposed_fix=(f"Which quantity is correct? The text says {text_qty}, the form says {form_qty}."),
                 fix_action=FixAction(
                     field="quantity",
                     suggested_value=suggested,

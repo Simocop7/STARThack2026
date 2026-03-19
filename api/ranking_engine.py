@@ -129,11 +129,11 @@ def _find_pricing_tier(
 # Thresholds keyed by rule_type — single source of truth matching policies.json rule_text.
 # If policies.json ever adds explicit threshold fields, read from there instead.
 _RULE_TYPE_THRESHOLDS: dict[str, float] = {
-    "mandatory_comparison": 100_000,   # CR-001: EUR/CHF 100K
-    "fast_track": 75_000,              # CR-003: EUR/CHF 75K
-    "security_review": 250_000,        # CR-005: EUR/CHF 250K
-    "engineering_spec_review": 50,     # CR-002: 50 units
-    "cv_review": 60,                   # CR-007: 60 consulting days
+    "mandatory_comparison": 100_000,  # CR-001: EUR/CHF 100K
+    "fast_track": 75_000,  # CR-003: EUR/CHF 75K
+    "security_review": 250_000,  # CR-005: EUR/CHF 250K
+    "engineering_spec_review": 50,  # CR-002: 50 units
+    "cv_review": 60,  # CR-007: 60 consulting days
 }
 
 
@@ -158,80 +158,122 @@ def _evaluate_category_rules(
         threshold = _RULE_TYPE_THRESHOLDS.get(rule_type)
 
         if rule_type == "mandatory_comparison" and threshold is not None and total_value > threshold:
-            checks.append(ComplianceCheck(
-                rule_id=rule_id, rule_description=rule_text,
-                result="warning",
-                detail=f"Total value {order.currency} {total_value:,.0f} > {threshold:,.0f} — at least 3 supplier quotes mandatory.",
-            ))
+            checks.append(
+                ComplianceCheck(
+                    rule_id=rule_id,
+                    rule_description=rule_text,
+                    result="warning",
+                    detail=f"Total value {order.currency} {total_value:,.0f} > {threshold:,.0f} — at least 3 supplier quotes mandatory.",
+                )
+            )
         elif rule_type == "engineering_spec_review" and threshold is not None and order.quantity > threshold:
-            checks.append(ComplianceCheck(
-                rule_id=rule_id, rule_description=rule_text,
-                result="warning",
-                detail=f"Quantity {order.quantity} > {int(threshold)} — engineering/CAD review required.",
-            ))
-            escalations.append(Escalation(
-                rule_id=rule_id, trigger="engineering_spec_review",
-                escalate_to="Engineering / CAD Lead", blocking=True,
-                detail=rule_text,
-            ))
+            checks.append(
+                ComplianceCheck(
+                    rule_id=rule_id,
+                    rule_description=rule_text,
+                    result="warning",
+                    detail=f"Quantity {order.quantity} > {int(threshold)} — engineering/CAD review required.",
+                )
+            )
+            escalations.append(
+                Escalation(
+                    rule_id=rule_id,
+                    trigger="engineering_spec_review",
+                    escalate_to="Engineering / CAD Lead",
+                    blocking=True,
+                    detail=rule_text,
+                )
+            )
         elif rule_type == "fast_track" and threshold is not None and total_value < threshold:
-            checks.append(ComplianceCheck(
-                rule_id=rule_id, rule_description=rule_text,
-                result="pass",
-                detail=f"Fast-track eligible: value {order.currency} {total_value:,.0f} < {threshold:,.0f}.",
-            ))
+            checks.append(
+                ComplianceCheck(
+                    rule_id=rule_id,
+                    rule_description=rule_text,
+                    result="pass",
+                    detail=f"Fast-track eligible: value {order.currency} {total_value:,.0f} < {threshold:,.0f}.",
+                )
+            )
         elif rule_type == "residency_check" and order.data_residency_required:
-            checks.append(ComplianceCheck(
-                rule_id=rule_id, rule_description=rule_text,
-                result="warning",
-                detail="Data residency required — only residency-compliant suppliers eligible.",
-            ))
+            checks.append(
+                ComplianceCheck(
+                    rule_id=rule_id,
+                    rule_description=rule_text,
+                    result="warning",
+                    detail="Data residency required — only residency-compliant suppliers eligible.",
+                )
+            )
         elif rule_type == "security_review" and threshold is not None and total_value > threshold:
-            checks.append(ComplianceCheck(
-                rule_id=rule_id, rule_description=rule_text,
-                result="warning",
-                detail=f"Total value {order.currency} {total_value:,.0f} > {threshold:,.0f} — security architecture review required.",
-            ))
-            escalations.append(Escalation(
-                rule_id=rule_id, trigger="security_review",
-                escalate_to="Security Architecture Review Board", blocking=True,
-                detail=rule_text,
-            ))
+            checks.append(
+                ComplianceCheck(
+                    rule_id=rule_id,
+                    rule_description=rule_text,
+                    result="warning",
+                    detail=f"Total value {order.currency} {total_value:,.0f} > {threshold:,.0f} — security architecture review required.",
+                )
+            )
+            escalations.append(
+                Escalation(
+                    rule_id=rule_id,
+                    trigger="security_review",
+                    escalate_to="Security Architecture Review Board",
+                    blocking=True,
+                    detail=rule_text,
+                )
+            )
         elif rule_type == "design_signoff":
-            checks.append(ComplianceCheck(
-                rule_id=rule_id, rule_description=rule_text,
-                result="warning",
-                detail="Design sign-off required before award.",
-            ))
+            checks.append(
+                ComplianceCheck(
+                    rule_id=rule_id,
+                    rule_description=rule_text,
+                    result="warning",
+                    detail="Design sign-off required before award.",
+                )
+            )
         elif rule_type == "cv_review" and threshold is not None and order.quantity > threshold:
-            checks.append(ComplianceCheck(
-                rule_id=rule_id, rule_description=rule_text,
-                result="warning",
-                detail=f"Quantity {order.quantity} > {int(threshold)} consulting days — CV review required.",
-            ))
+            checks.append(
+                ComplianceCheck(
+                    rule_id=rule_id,
+                    rule_description=rule_text,
+                    result="warning",
+                    detail=f"Quantity {order.quantity} > {int(threshold)} consulting days — CV review required.",
+                )
+            )
         elif rule_type == "certification_check":
-            checks.append(ComplianceCheck(
-                rule_id=rule_id, rule_description=rule_text,
-                result="warning",
-                detail="Cybersecurity certification verification required before award.",
-            ))
+            checks.append(
+                ComplianceCheck(
+                    rule_id=rule_id,
+                    rule_description=rule_text,
+                    result="warning",
+                    detail="Cybersecurity certification verification required before award.",
+                )
+            )
         elif rule_type == "performance_baseline":
-            checks.append(ComplianceCheck(
-                rule_id=rule_id, rule_description=rule_text,
-                result="warning",
-                detail="SEM proposals must include performance baseline.",
-            ))
+            checks.append(
+                ComplianceCheck(
+                    rule_id=rule_id,
+                    rule_description=rule_text,
+                    result="warning",
+                    detail="SEM proposals must include performance baseline.",
+                )
+            )
         elif rule_type == "brand_safety":
-            checks.append(ComplianceCheck(
-                rule_id=rule_id, rule_description=rule_text,
-                result="warning",
-                detail="Brand-safety review required before final award.",
-            ))
-            escalations.append(Escalation(
-                rule_id="ER-007", trigger="brand_safety_review_needed",
-                escalate_to="Marketing Governance Lead", blocking=True,
-                detail=rule_text,
-            ))
+            checks.append(
+                ComplianceCheck(
+                    rule_id=rule_id,
+                    rule_description=rule_text,
+                    result="warning",
+                    detail="Brand-safety review required before final award.",
+                )
+            )
+            escalations.append(
+                Escalation(
+                    rule_id="ER-007",
+                    trigger="brand_safety_review_needed",
+                    escalate_to="Marketing Governance Lead",
+                    blocking=True,
+                    detail=rule_text,
+                )
+            )
 
     return checks, escalations
 
@@ -246,22 +288,26 @@ def _evaluate_geography_rules(
     for rule in policies.get("geography_rules", []):
         # Rules with a single "country" field (GR-001 to GR-004)
         if "country" in rule and rule["country"] == order.delivery_country:
-            checks.append(ComplianceCheck(
-                rule_id=rule["rule_id"],
-                rule_description=rule.get("rule_text", rule.get("rule", "")),
-                result="warning",
-                detail=f"Geography rule applies for {order.delivery_country}.",
-            ))
+            checks.append(
+                ComplianceCheck(
+                    rule_id=rule["rule_id"],
+                    rule_description=rule.get("rule_text", rule.get("rule", "")),
+                    result="warning",
+                    detail=f"Geography rule applies for {order.delivery_country}.",
+                )
+            )
         # Rules with "countries" list (GR-005 to GR-008)
         elif "countries" in rule and order.delivery_country in rule["countries"]:
             applies_to = rule.get("applies_to", [])
             if not applies_to or order.category_l1 in applies_to:
-                checks.append(ComplianceCheck(
-                    rule_id=rule["rule_id"],
-                    rule_description=rule.get("rule", rule.get("rule_text", "")),
-                    result="warning",
-                    detail=f"Regional rule applies for {order.delivery_country} in {rule.get('region', 'region')}.",
-                ))
+                checks.append(
+                    ComplianceCheck(
+                        rule_id=rule["rule_id"],
+                        rule_description=rule.get("rule", rule.get("rule_text", "")),
+                        result="warning",
+                        detail=f"Regional rule applies for {order.delivery_country} in {rule.get('region', 'region')}.",
+                    )
+                )
 
     return checks
 
@@ -337,57 +383,84 @@ def _filter_suppliers(
         sname = sup["supplier_name"]
 
         if sup.get("contract_status") != "active":
-            excluded.append(ExcludedSupplier(
-                supplier_id=sid, supplier_name=sname,
-                reason=f"Contract status: {sup.get('contract_status', 'unknown')}",
-            ))
+            excluded.append(
+                ExcludedSupplier(
+                    supplier_id=sid,
+                    supplier_name=sname,
+                    reason=f"Contract status: {sup.get('contract_status', 'unknown')}",
+                )
+            )
             continue
 
         if order.delivery_country not in sup["service_regions"]:
-            excluded.append(ExcludedSupplier(
-                supplier_id=sid, supplier_name=sname,
-                reason=f"Does not service delivery country {order.delivery_country}. "
-                       f"Covers: {', '.join(sup['service_regions'])}.",
-            ))
+            excluded.append(
+                ExcludedSupplier(
+                    supplier_id=sid,
+                    supplier_name=sname,
+                    reason=f"Does not service delivery country {order.delivery_country}. "
+                    f"Covers: {', '.join(sup['service_regions'])}.",
+                )
+            )
             continue
 
         if order.data_residency_required and not sup.get("data_residency_supported", False):
-            excluded.append(ExcludedSupplier(
-                supplier_id=sid, supplier_name=sname,
-                reason="Data residency required but supplier does not support it.",
-            ))
+            excluded.append(
+                ExcludedSupplier(
+                    supplier_id=sid,
+                    supplier_name=sname,
+                    reason="Data residency required but supplier does not support it.",
+                )
+            )
             continue
 
         if sup["capacity_per_month"] and order.quantity > sup["capacity_per_month"]:
-            excluded.append(ExcludedSupplier(
-                supplier_id=sid, supplier_name=sname,
-                reason=(
-                    f"Requested quantity ({order.quantity}) exceeds monthly capacity "
-                    f"({sup['capacity_per_month']})."
-                ),
-            ))
+            excluded.append(
+                ExcludedSupplier(
+                    supplier_id=sid,
+                    supplier_name=sname,
+                    reason=(
+                        f"Requested quantity ({order.quantity}) exceeds monthly capacity ({sup['capacity_per_month']})."
+                    ),
+                )
+            )
             continue
 
         tier = _find_pricing_tier(
-            sid, order.category_l1, order.category_l2, region, order.quantity, pricing_index,
+            sid,
+            order.category_l1,
+            order.category_l2,
+            region,
+            order.quantity,
+            pricing_index,
         )
         if tier is None:
-            excluded.append(ExcludedSupplier(
-                supplier_id=sid, supplier_name=sname,
-                reason=f"No active pricing tier for region '{region}' and quantity {order.quantity}.",
-            ))
+            excluded.append(
+                ExcludedSupplier(
+                    supplier_id=sid,
+                    supplier_name=sname,
+                    reason=f"No active pricing tier for region '{region}' and quantity {order.quantity}.",
+                )
+            )
             continue
 
         total_estimate = tier["unit_price"] * order.quantity
         restricted, restriction_reason = _check_restriction(
-            sid, order.category_l1, order.category_l2,
-            order.delivery_country, total_estimate, order.currency, policies,
+            sid,
+            order.category_l1,
+            order.category_l2,
+            order.delivery_country,
+            total_estimate,
+            order.currency,
+            policies,
         )
         if restricted:
-            excluded.append(ExcludedSupplier(
-                supplier_id=sid, supplier_name=sname,
-                reason=f"Restricted: {restriction_reason}",
-            ))
+            excluded.append(
+                ExcludedSupplier(
+                    supplier_id=sid,
+                    supplier_name=sname,
+                    reason=f"Restricted: {restriction_reason}",
+                )
+            )
             continue
 
         eligible.append({**sup, "_tier": tier, "_total": total_estimate})
@@ -413,7 +486,7 @@ def _score_suppliers(
 
     prices = [c["_total"] for c in eligible]
     min_price, max_price = min(prices), max(prices)
-    price_range = max_price - min_price if max_price != min_price else 1.0
+    _ = max_price - min_price if max_price != min_price else 1.0  # kept for clarity
 
     scored: list[dict[str, Any]] = []
 
@@ -427,7 +500,7 @@ def _score_suppliers(
         # Quality/Risk/ESG: absolute 0-100 scale from dataset so scores are
         # meaningful regardless of how many suppliers are being compared.
         quality_norm = c["quality_score"] / 100.0
-        risk_norm = 1.0 - (c["risk_score"] / 100.0)   # lower risk → higher score
+        risk_norm = 1.0 - (c["risk_score"] / 100.0)  # lower risk → higher score
         esg_norm = c["esg_score"] / 100.0
 
         std_lt = tier["standard_lead_time_days"]
@@ -451,24 +524,29 @@ def _score_suppliers(
         )
 
         is_preferred = _is_preferred_supplier(
-            c["supplier_id"], order.category_l1, order.category_l2,
-            order.delivery_country, policies,
+            c["supplier_id"],
+            order.category_l1,
+            order.category_l2,
+            order.delivery_country,
+            policies,
         )
 
-        scored.append({
-            "supplier": c,
-            "tier": tier,
-            "total": total,
-            "price_norm": price_norm,
-            "quality_norm": quality_norm,
-            "risk_norm": risk_norm,
-            "esg_norm": esg_norm,
-            "lt_score": lt_score,
-            "composite": composite,
-            "is_preferred": is_preferred,
-            "meets_lead_time": meets_standard or meets_expedited,
-            "meets_standard": meets_standard,
-        })
+        scored.append(
+            {
+                "supplier": c,
+                "tier": tier,
+                "total": total,
+                "price_norm": price_norm,
+                "quality_norm": quality_norm,
+                "risk_norm": risk_norm,
+                "esg_norm": esg_norm,
+                "lt_score": lt_score,
+                "composite": composite,
+                "is_preferred": is_preferred,
+                "meets_lead_time": meets_standard or meets_expedited,
+                "meets_standard": meets_standard,
+            }
+        )
 
     scored.sort(key=lambda x: (-x["composite"], -x["is_preferred"], x["total"]))
     return scored
@@ -490,33 +568,36 @@ def _build_scored_supplier(
     sup = s["supplier"]
     tier = s["tier"]
 
-    is_order_preferred = (
-        order.preferred_supplier_id is not None
-        and sup["supplier_id"] == order.preferred_supplier_id
-    )
+    is_order_preferred = order.preferred_supplier_id is not None and sup["supplier_id"] == order.preferred_supplier_id
 
     supplier_checks = list(cat_checks) + list(geo_checks)
-    supplier_checks.append(ComplianceCheck(
-        rule_id="RESTRICTION_CHECK",
-        rule_description="Policy restriction verification",
-        result="pass",
-        detail=f"{sup['supplier_name']} is not restricted for "
-               f"{order.category_l1}/{order.category_l2} in {order.delivery_country}.",
-    ))
-    if sup.get("data_residency_supported"):
-        supplier_checks.append(ComplianceCheck(
-            rule_id="DATA_RESIDENCY",
-            rule_description="Data residency support",
+    supplier_checks.append(
+        ComplianceCheck(
+            rule_id="RESTRICTION_CHECK",
+            rule_description="Policy restriction verification",
             result="pass",
-            detail="Supplier supports data residency.",
-        ))
+            detail=f"{sup['supplier_name']} is not restricted for "
+            f"{order.category_l1}/{order.category_l2} in {order.delivery_country}.",
+        )
+    )
+    if sup.get("data_residency_supported"):
+        supplier_checks.append(
+            ComplianceCheck(
+                rule_id="DATA_RESIDENCY",
+                rule_description="Data residency support",
+                result="pass",
+                detail="Supplier supports data residency.",
+            )
+        )
     elif order.data_residency_required:
-        supplier_checks.append(ComplianceCheck(
-            rule_id="DATA_RESIDENCY",
-            rule_description="Data residency support",
-            result="fail",
-            detail="Supplier does not support data residency (should have been filtered).",
-        ))
+        supplier_checks.append(
+            ComplianceCheck(
+                rule_id="DATA_RESIDENCY",
+                rule_description="Data residency support",
+                result="fail",
+                detail="Supplier does not support data residency (should have been filtered).",
+            )
+        )
 
     tier_label = _fmt_tier(tier["min_quantity"], tier["max_quantity"])
     rationale_parts = [
@@ -541,10 +622,7 @@ def _build_scored_supplier(
             f"Requires expedited delivery ({tier['expedited_lead_time_days']}d) "
             f"at {order.currency} {tier['expedited_unit_price']:,.2f}/unit."
         )
-    rationale_parts.append(
-        f"Quality: {sup['quality_score']}, Risk: {sup['risk_score']}, "
-        f"ESG: {sup['esg_score']}."
-    )
+    rationale_parts.append(f"Quality: {sup['quality_score']}, Risk: {sup['risk_score']}, ESG: {sup['esg_score']}.")
 
     return ScoredSupplier(
         rank=rank,
@@ -605,11 +683,15 @@ def rank_suppliers_deterministically(
             method_used=RankingMethod.DETERMINISTIC,
             scoring_weights=weights,
             currency=order.currency,
-            escalations=[Escalation(
-                rule_id="ER-001", trigger="unknown_delivery_country",
-                escalate_to="Requester Clarification", blocking=True,
-                detail=f"Delivery country '{order.delivery_country}' could not be mapped to a pricing region.",
-            )],
+            escalations=[
+                Escalation(
+                    rule_id="ER-001",
+                    trigger="unknown_delivery_country",
+                    escalate_to="Requester Clarification",
+                    blocking=True,
+                    detail=f"Delivery country '{order.delivery_country}' could not be mapped to a pricing region.",
+                )
+            ],
         )
 
     days_until_required: int | None = None
@@ -622,35 +704,44 @@ def rank_suppliers_deterministically(
     potential_suppliers = store.suppliers_by_category.get(candidates_key, [])
 
     eligible, excluded = _filter_suppliers(
-        order, region, potential_suppliers, pricing_index, policies,
+        order,
+        region,
+        potential_suppliers,
+        pricing_index,
+        policies,
     )
 
     # ── Escalations from filter results ─────────────────────────────
 
     escalations: list[Escalation] = []
 
-    capacity_exceeded = [
-        e for e in excluded
-        if "exceeds monthly capacity" in e.reason
-    ]
+    capacity_exceeded = [e for e in excluded if "exceeds monthly capacity" in e.reason]
     if capacity_exceeded:
-        escalations.append(Escalation(
-            rule_id="ER-006", trigger="quantity_exceeds_capacity",
-            escalate_to="Sourcing Excellence Lead", blocking=False,
-            detail=(
-                f"Requested quantity ({order.quantity}) exceeds monthly capacity of "
-                + ", ".join(f"{e.supplier_name}" for e in capacity_exceeded)
-                + ". Alternative sourcing or split delivery may be required."
-            ),
-        ))
+        escalations.append(
+            Escalation(
+                rule_id="ER-006",
+                trigger="quantity_exceeds_capacity",
+                escalate_to="Sourcing Excellence Lead",
+                blocking=False,
+                detail=(
+                    f"Requested quantity ({order.quantity}) exceeds monthly capacity of "
+                    + ", ".join(f"{e.supplier_name}" for e in capacity_exceeded)
+                    + ". Alternative sourcing or split delivery may be required."
+                ),
+            )
+        )
 
     if not eligible:
-        escalations.append(Escalation(
-            rule_id="ER-004", trigger="no_compliant_supplier_found",
-            escalate_to="Head of Category", blocking=True,
-            detail=f"No supplier passed filters for {order.category_l1}/{order.category_l2} "
-                   f"in {order.delivery_country}.",
-        ))
+        escalations.append(
+            Escalation(
+                rule_id="ER-004",
+                trigger="no_compliant_supplier_found",
+                escalate_to="Head of Category",
+                blocking=True,
+                detail=f"No supplier passed filters for {order.category_l1}/{order.category_l2} "
+                f"in {order.delivery_country}.",
+            )
+        )
         return RankedSupplierOutput(
             request_id=order.request_id,
             method_used=RankingMethod.DETERMINISTIC,
@@ -658,8 +749,14 @@ def rank_suppliers_deterministically(
             currency=order.currency,
             excluded=excluded,
             escalations=escalations,
-            policies_checked=["restricted_suppliers", "category_match", "geography_coverage",
-                              "capacity", "data_residency", "contract_status"],
+            policies_checked=[
+                "restricted_suppliers",
+                "category_match",
+                "geography_coverage",
+                "capacity",
+                "data_residency",
+                "contract_status",
+            ],
         )
 
     # ── Stage 2: Score and rank ─────────────────────────────────────
@@ -690,34 +787,37 @@ def rank_suppliers_deterministically(
             approval_note += f" Deviation approval from: {', '.join(deviation)}."
 
     if order.preferred_supplier_id:
-        pref_excluded = any(
-            e.supplier_id == order.preferred_supplier_id for e in excluded
-        )
+        pref_excluded = any(e.supplier_id == order.preferred_supplier_id for e in excluded)
         if pref_excluded:
-            escalations.append(Escalation(
-                rule_id="ER-002", trigger="preferred_supplier_restricted",
-                escalate_to="Procurement Manager", blocking=False,
-                detail=f"Preferred supplier {order.preferred_supplier_id} was excluded from ranking.",
-            ))
+            escalations.append(
+                Escalation(
+                    rule_id="ER-002",
+                    trigger="preferred_supplier_restricted",
+                    escalate_to="Procurement Manager",
+                    blocking=False,
+                    detail=f"Preferred supplier {order.preferred_supplier_id} was excluded from ranking.",
+                )
+            )
 
     budget_sufficient = None
     if order.budget_amount is not None and scored:
         cheapest = min(s["total"] for s in scored)
         budget_sufficient = order.budget_amount >= cheapest
         if not budget_sufficient:
-            escalations.append(Escalation(
-                rule_id="ER-003", trigger="budget_insufficient",
-                escalate_to="Head of Strategic Sourcing", blocking=False,
-                detail=(
-                    f"Stated budget {order.currency} {order.budget_amount:,.0f} is below "
-                    f"cheapest option {order.currency} {cheapest:,.0f}."
-                ),
-            ))
+            escalations.append(
+                Escalation(
+                    rule_id="ER-003",
+                    trigger="budget_insufficient",
+                    escalate_to="Head of Strategic Sourcing",
+                    blocking=False,
+                    detail=(
+                        f"Stated budget {order.currency} {order.budget_amount:,.0f} is below "
+                        f"cheapest option {order.currency} {cheapest:,.0f}."
+                    ),
+                )
+            )
 
-    ranking = [
-        _build_scored_supplier(i, s, order, cat_checks, geo_checks)
-        for i, s in enumerate(scored[:5], start=1)
-    ]
+    ranking = [_build_scored_supplier(i, s, order, cat_checks, geo_checks) for i, s in enumerate(scored[:5], start=1)]
 
     min_cost_supplier = scored[0]["supplier"]["supplier_name"] if scored else None
     min_cost = scored[0]["total"] if scored else None
@@ -738,9 +838,12 @@ def rank_suppliers_deterministically(
         approval_threshold_note=approval_note,
         quotes_required=quotes_required,
         policies_checked=[
-            "restricted_suppliers", "preferred_suppliers",
-            "category_rules", "geography_rules",
-            "approval_thresholds", "escalation_rules",
+            "restricted_suppliers",
+            "preferred_suppliers",
+            "category_rules",
+            "geography_rules",
+            "approval_thresholds",
+            "escalation_rules",
         ],
     )
 
@@ -766,18 +869,14 @@ def needs_llm_fallback(result: RankedSupplierOutput, order: CleanOrderRecap) -> 
 
     # Too few suppliers to meet quoting requirements
     if result.quotes_required and len(result.ranking) < result.quotes_required:
-        reasons.append(
-            f"Only {len(result.ranking)} suppliers available but {result.quotes_required} quotes required."
-        )
+        reasons.append(f"Only {len(result.ranking)} suppliers available but {result.quotes_required} quotes required.")
 
     # Score ambiguity (top-2 within 1%)
     if len(result.ranking) >= 2:
         top_score = result.ranking[0].composite_score
         second_score = result.ranking[1].composite_score
         if top_score > 0 and abs(top_score - second_score) / top_score < 0.01:
-            reasons.append(
-                f"Top-2 scores are within 1% ({top_score:.4f} vs {second_score:.4f}) — ambiguous winner."
-            )
+            reasons.append(f"Top-2 scores are within 1% ({top_score:.4f} vs {second_score:.4f}) — ambiguous winner.")
 
     # Budget breach
     if result.budget_sufficient is False:
@@ -786,16 +885,11 @@ def needs_llm_fallback(result: RankedSupplierOutput, order: CleanOrderRecap) -> 
     # Blocking escalations
     blocking = [e for e in result.escalations if e.blocking]
     if blocking:
-        reasons.append(
-            f"{len(blocking)} blocking escalation(s): "
-            + ", ".join(e.rule_id for e in blocking)
-        )
+        reasons.append(f"{len(blocking)} blocking escalation(s): " + ", ".join(e.rule_id for e in blocking))
 
     # Data residency with few options
     if order.data_residency_required and len(result.ranking) <= 2:
-        reasons.append(
-            f"Data residency required but only {len(result.ranking)} compliant supplier(s)."
-        )
+        reasons.append(f"Data residency required but only {len(result.ranking)} compliant supplier(s).")
 
     if reasons:
         return True, " | ".join(reasons)

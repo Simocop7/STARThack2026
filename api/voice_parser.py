@@ -8,7 +8,6 @@ from typing import Any
 
 from api.azure_client import get_azure_client
 
-
 _VOICE_TOOL_SCHEMA = {
     "type": "function",
     "function": {
@@ -91,10 +90,10 @@ IMPORTANT:
         max_tokens=512,
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Voice transcript: \"{transcript}\""},
+            {"role": "user", "content": f'Voice transcript: "{transcript}"'},
         ],
         tools=[_VOICE_TOOL_SCHEMA],
-        tool_choice={"type": "function", "function": {"name": "parsed_voice_fields"}},
+        tool_choice={"type": "function", "function": {"name": "parsed_voice_fields"}},  # type: ignore[call-overload]
     )
 
     message = response.choices[0].message

@@ -7,14 +7,12 @@ reviewers can trace exactly why a supplier was ranked (or excluded).
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Optional
 
-import re
-
 from pydantic import BaseModel, Field, field_validator
-
 
 # ── Input: Clean Order Recap (from the Procurement Office) ─────────────
 
@@ -127,10 +125,7 @@ class ScoredSupplier(BaseModel):
     # Audit rationale — the most important field for the judges
     recommendation_note: str = Field(
         ...,
-        description=(
-            "Human-readable rationale: why this rank, which tier, "
-            "which checks passed/failed."
-        ),
+        description=("Human-readable rationale: why this rank, which tier, which checks passed/failed."),
     )
 
 

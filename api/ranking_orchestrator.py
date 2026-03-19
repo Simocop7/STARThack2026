@@ -67,20 +67,24 @@ async def get_top_5_suppliers(
     if not det_result.ranking:
         # No suppliers to re-rank — LLM can't help, return as-is
         logger.warning(
-            "No ranked suppliers for %s — skipping LLM fallback.", order.request_id,
+            "No ranked suppliers for %s — skipping LLM fallback.",
+            order.request_id,
         )
         return det_result
 
     reason = fallback_reason if fallback_needed else "force_llm=True (manual override)"
     logger.info(
-        "Invoking LLM fallback for %s. Reason: %s", order.request_id, reason,
+        "Invoking LLM fallback for %s. Reason: %s",
+        order.request_id,
+        reason,
     )
 
     try:
         llm_result = await rank_suppliers_with_llm(order, det_result, reason)
         logger.info(
             "LLM fallback complete for %s: %d suppliers re-ranked.",
-            order.request_id, len(llm_result.ranking),
+            order.request_id,
+            len(llm_result.ranking),
         )
         return llm_result
 
@@ -91,12 +95,14 @@ async def get_top_5_suppliers(
         APIError,
         APITimeoutError,
         ValidationError,
-    ) as exc:
+    ):
         logger.exception(
             "LLM fallback failed for %s — returning deterministic result.",
             order.request_id,
         )
-        return det_result.model_copy(update={
-            "llm_fallback_reason": f"LLM invocation failed: {reason}",
-            "method_used": RankingMethod.HYBRID,
-        })
+        return det_result.model_copy(
+            update={
+                "llm_fallback_reason": f"LLM invocation failed: {reason}",
+                "method_used": RankingMethod.HYBRID,
+            }
+        )

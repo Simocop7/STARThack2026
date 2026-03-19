@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import json
 import os
+
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import AzureChatOpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 from api.ranking_models import (
     CleanOrderRecap,
@@ -24,7 +25,6 @@ from api.ranking_models import (
     RankingMethod,
     ScoredSupplier,
 )
-
 
 # ── LLM output schema (subset — the LLM fills these fields) ──────────
 
@@ -36,30 +36,28 @@ class LLMSupplierRanking(BaseModel):
         rank: int = Field(..., description="1-based rank")
         supplier_id: str
         supplier_name: str
-        recommended: bool = Field(
-            ..., description="True if the LLM recommends this supplier"
-        )
+        recommended: bool = Field(..., description="True if the LLM recommends this supplier")
         rationale: str = Field(
             ...,
-            description=(
-                "Detailed audit-ready explanation: why this rank, "
-                "trade-offs considered, compliance notes."
-            ),
+            description=("Detailed audit-ready explanation: why this rank, trade-offs considered, compliance notes."),
         )
         adjusted_composite_score: float = Field(
-            ..., ge=0, le=1,
+            ...,
+            ge=0,
+            le=1,
             description="LLM-adjusted composite score (0-1)",
         )
 
     ranking: list[LLMRankedEntry] = Field(
-        ..., min_length=1, max_length=5,
+        ...,
+        min_length=1,
+        max_length=5,
         description="Ranked list of up to 5 suppliers",
     )
     overall_assessment: str = Field(
         ...,
         description=(
-            "High-level summary of the sourcing situation: key risks, "
-            "trade-offs, and whether proceeding is advisable."
+            "High-level summary of the sourcing situation: key risks, trade-offs, and whether proceeding is advisable."
         ),
     )
     additional_escalations: list[str] = Field(
@@ -134,8 +132,14 @@ async def rank_suppliers_with_llm(
     prompt = PromptTemplate(
         template=_SYSTEM_PROMPT + "\n\n" + _USER_PROMPT,
         input_variables=[
-            "order_json", "fallback_reason", "suppliers_json",
-            "w_price", "w_quality", "w_risk", "w_esg", "w_lead_time",
+            "order_json",
+            "fallback_reason",
+            "suppliers_json",
+            "w_price",
+            "w_quality",
+            "w_risk",
+            "w_esg",
+            "w_lead_time",
         ],
         partial_variables={
             "format_instructions": parser.get_format_instructions(),
@@ -145,27 +149,29 @@ async def rank_suppliers_with_llm(
     # Prepare supplier data for the LLM
     suppliers_for_llm = []
     for s in deterministic_result.ranking:
-        suppliers_for_llm.append({
-            "supplier_id": s.supplier_id,
-            "supplier_name": s.supplier_name,
-            "is_preferred": s.is_preferred,
-            "unit_price": s.unit_price,
-            "total_price": s.total_price,
-            "expedited_unit_price": s.expedited_unit_price,
-            "expedited_total_price": s.expedited_total_price,
-            "standard_lead_time_days": s.standard_lead_time_days,
-            "expedited_lead_time_days": s.expedited_lead_time_days,
-            "meets_lead_time": s.meets_lead_time,
-            "score_breakdown": {
-                "price": s.score_breakdown.price_score,
-                "quality": s.score_breakdown.quality_score,
-                "risk": s.score_breakdown.risk_score,
-                "esg": s.score_breakdown.esg_score,
-                "lead_time": s.score_breakdown.lead_time_score,
-            },
-            "deterministic_score": s.composite_score,
-            "pricing_tier": s.pricing_tier_applied,
-        })
+        suppliers_for_llm.append(
+            {
+                "supplier_id": s.supplier_id,
+                "supplier_name": s.supplier_name,
+                "is_preferred": s.is_preferred,
+                "unit_price": s.unit_price,
+                "total_price": s.total_price,
+                "expedited_unit_price": s.expedited_unit_price,
+                "expedited_total_price": s.expedited_total_price,
+                "standard_lead_time_days": s.standard_lead_time_days,
+                "expedited_lead_time_days": s.expedited_lead_time_days,
+                "meets_lead_time": s.meets_lead_time,
+                "score_breakdown": {
+                    "price": s.score_breakdown.price_score,
+                    "quality": s.score_breakdown.quality_score,
+                    "risk": s.score_breakdown.risk_score,
+                    "esg": s.score_breakdown.esg_score,
+                    "lead_time": s.score_breakdown.lead_time_score,
+                },
+                "deterministic_score": s.composite_score,
+                "pricing_tier": s.pricing_tier_applied,
+            }
+        )
 
     weights = deterministic_result.scoring_weights
 
@@ -173,31 +179,31 @@ async def rank_suppliers_with_llm(
     endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
     api_key = os.getenv("AZURE_OPENAI_API_KEY")
     if not endpoint or not api_key:
-        raise ValueError(
-            "Missing required environment variables: AZURE_OPENAI_ENDPOINT and/or AZURE_OPENAI_API_KEY"
-        )
+        raise ValueError("Missing required environment variables: AZURE_OPENAI_ENDPOINT and/or AZURE_OPENAI_API_KEY")
     llm = AzureChatOpenAI(
         azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o"),
         azure_endpoint=endpoint,
-        api_key=api_key,
+        api_key=SecretStr(api_key),
         api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2025-01-01-preview"),
         temperature=0.1,
-        max_tokens=2000,
+        max_completion_tokens=2000,
     )
 
     chain = prompt | llm | parser
 
     # Invoke
-    llm_output: LLMSupplierRanking = await chain.ainvoke({
-        "order_json": order.model_dump_json(indent=2),
-        "fallback_reason": fallback_reason,
-        "suppliers_json": json.dumps(suppliers_for_llm, indent=2),
-        "w_price": weights.price,
-        "w_quality": weights.quality,
-        "w_risk": weights.risk,
-        "w_esg": weights.esg,
-        "w_lead_time": weights.lead_time,
-    })
+    llm_output: LLMSupplierRanking = await chain.ainvoke(
+        {
+            "order_json": order.model_dump_json(indent=2),
+            "fallback_reason": fallback_reason,
+            "suppliers_json": json.dumps(suppliers_for_llm, indent=2),
+            "w_price": weights.price,
+            "w_quality": weights.quality,
+            "w_risk": weights.risk,
+            "w_esg": weights.esg,
+            "w_lead_time": weights.lead_time,
+        }
+    )
 
     # ── Merge LLM output back into the structured result ──────────
 
@@ -210,25 +216,28 @@ async def rank_suppliers_with_llm(
         if original is None:
             continue
 
-        new_ranking.append(ScoredSupplier(
-            rank=entry.rank,
-            supplier_id=original.supplier_id,
-            supplier_name=original.supplier_name,
-            is_preferred=original.is_preferred,
-            is_incumbent=original.is_incumbent,
-            meets_lead_time=original.meets_lead_time,
-            pricing_tier_applied=original.pricing_tier_applied,
-            unit_price=original.unit_price,
-            total_price=original.total_price,
-            expedited_unit_price=original.expedited_unit_price,
-            expedited_total_price=original.expedited_total_price,
-            standard_lead_time_days=original.standard_lead_time_days,
-            expedited_lead_time_days=original.expedited_lead_time_days,
-            score_breakdown=original.score_breakdown,
-            composite_score=round(entry.adjusted_composite_score, 4),
-            compliance_checks=original.compliance_checks,
-            recommendation_note=entry.rationale,
-        ))
+        new_ranking.append(
+            ScoredSupplier(
+                rank=entry.rank,
+                supplier_id=original.supplier_id,
+                supplier_name=original.supplier_name,
+                is_preferred=original.is_preferred,
+                is_incumbent=original.is_incumbent,
+                meets_lead_time=original.meets_lead_time,
+                pricing_tier_applied=original.pricing_tier_applied,
+                unit_price=original.unit_price,
+                total_price=original.total_price,
+                expedited_unit_price=original.expedited_unit_price,
+                expedited_total_price=original.expedited_total_price,
+                standard_lead_time_days=original.standard_lead_time_days,
+                expedited_lead_time_days=original.expedited_lead_time_days,
+                score_breakdown=original.score_breakdown,
+                raw_scores=original.raw_scores,
+                composite_score=round(entry.adjusted_composite_score, 4),
+                compliance_checks=original.compliance_checks,
+                recommendation_note=entry.rationale,
+            )
+        )
 
     # Additional escalations from LLM
     additional_escalations = [

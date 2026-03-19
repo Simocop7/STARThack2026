@@ -31,25 +31,45 @@ def check_policy_rules(
         # Check quantity-based triggers
         if rule_id == "CR-002" and quantity is not None and quantity > 50:
             counter += 1
-            issues.append(_info_issue(
-                f"POL-{counter:03d}", rule_id, rule_type, rule_text,
-            ))
+            issues.append(
+                _info_issue(
+                    f"POL-{counter:03d}",
+                    rule_id,
+                    rule_type,
+                    rule_text,
+                )
+            )
         elif rule_id == "CR-007" and quantity is not None and quantity > 60:
             counter += 1
-            issues.append(_info_issue(
-                f"POL-{counter:03d}", rule_id, rule_type, rule_text,
-            ))
+            issues.append(
+                _info_issue(
+                    f"POL-{counter:03d}",
+                    rule_id,
+                    rule_type,
+                    rule_text,
+                )
+            )
         elif rule_id in ("CR-006", "CR-008", "CR-009", "CR-010"):
             # Always applies for the matching category
             counter += 1
-            issues.append(_info_issue(
-                f"POL-{counter:03d}", rule_id, rule_type, rule_text,
-            ))
+            issues.append(
+                _info_issue(
+                    f"POL-{counter:03d}",
+                    rule_id,
+                    rule_type,
+                    rule_text,
+                )
+            )
         elif rule_id == "CR-004" and enriched.data_residency_required:
             counter += 1
-            issues.append(_info_issue(
-                f"POL-{counter:03d}", rule_id, rule_type, rule_text,
-            ))
+            issues.append(
+                _info_issue(
+                    f"POL-{counter:03d}",
+                    rule_id,
+                    rule_type,
+                    rule_text,
+                )
+            )
 
     # --- Geography rules ---
     for rule in policies.get("geography_rules", []):
@@ -83,7 +103,10 @@ def check_policy_rules(
 
 
 def _info_issue(
-    issue_id: str, rule_id: str, rule_type: str, rule_text: str,
+    issue_id: str,
+    rule_id: str,
+    rule_type: str,
+    rule_text: str,
 ) -> ValidationIssue:
     return ValidationIssue(
         issue_id=issue_id,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import types
-from typing import Any, get_args, get_origin, Union
+from typing import Any, Union, get_args, get_origin
 
 from api.data_loader import DataStore
 from api.interpreter import interpret_request
@@ -34,10 +34,7 @@ def _apply_fixes(
     the EnrichedRequest model schema.
     """
     data = enriched.model_dump(mode="json")
-    field_types = {
-        name: info.annotation
-        for name, info in EnrichedRequest.model_fields.items()
-    }
+    field_types = {name: info.annotation for name, info in EnrichedRequest.model_fields.items()}
 
     for issue in issues:
         if issue.fix_action and issue.fix_action.suggested_value:
@@ -85,10 +82,12 @@ async def process_request(form_input: FormInput) -> ValidationResult:
     if form_input.preferred_supplier and not enriched.preferred_supplier_id:
         resolved_id = store.get_supplier_id(form_input.preferred_supplier)
         if resolved_id:
-            enriched = enriched.model_copy(update={
-                "preferred_supplier_id": resolved_id,
-                "preferred_supplier_name": store.get_supplier_name(resolved_id),
-            })
+            enriched = enriched.model_copy(
+                update={
+                    "preferred_supplier_id": resolved_id,
+                    "preferred_supplier_name": store.get_supplier_name(resolved_id),
+                }
+            )
 
     # ── Category disambiguation check ──
     cat_suggestion = enriched.category_suggestion
@@ -119,33 +118,33 @@ async def process_request(form_input: FormInput) -> ValidationResult:
 
     issues.extend(check_completeness(enriched))
 
-    issues.extend(check_supplier(
-        enriched,
-        suppliers_by_category=store.suppliers_by_category,
-        supplier_by_key=store.supplier_by_key,
-        policies=store.policies,
-    ))
+    issues.extend(
+        check_supplier(
+            enriched,
+            suppliers_by_category=store.suppliers_by_category,
+            supplier_by_key=store.supplier_by_key,
+            policies=store.policies,
+        )
+    )
 
-    issues.extend(check_lead_time(
-        enriched,
-        pricing_index=store.pricing_index,
-        suppliers_by_category=store.suppliers_by_category,
-    ))
+    issues.extend(
+        check_lead_time(
+            enriched,
+            pricing_index=store.pricing_index,
+            suppliers_by_category=store.suppliers_by_category,
+        )
+    )
 
     issues.extend(check_contradictions(enriched, form_input))
 
     issues.extend(check_policy_rules(enriched, store.policies))
 
-    is_valid = not any(
-        i.severity in (Severity.CRITICAL, Severity.HIGH) for i in issues
-    )
+    is_valid = not any(i.severity in (Severity.CRITICAL, Severity.HIGH) for i in issues)
 
     corrected = _apply_fixes(enriched, issues)
 
     # ── Stage 3: LLM message generation (only blocking issues) ──
-    blocking_issues = [
-        i for i in issues if i.severity in (Severity.CRITICAL, Severity.HIGH)
-    ]
+    blocking_issues = [i for i in issues if i.severity in (Severity.CRITICAL, Severity.HIGH)]
     user_message = await generate_user_message(
         enriched,
         blocking_issues,

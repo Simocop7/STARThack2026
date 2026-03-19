@@ -43,9 +43,7 @@ def check_lead_time(
     if not region:
         return issues
 
-    cat_suppliers = suppliers_by_category.get(
-        (enriched.category_l1, enriched.category_l2), []
-    )
+    cat_suppliers = suppliers_by_category.get((enriched.category_l1, enriched.category_l2), [])
     if not cat_suppliers:
         return issues
 
@@ -83,8 +81,7 @@ def check_lead_time(
                     f"{best_expedited} days."
                 ),
                 proposed_fix=(
-                    f"Earliest feasible date: {earliest} "
-                    f"(expedited shipping with {best_expedited_supplier})."
+                    f"Earliest feasible date: {earliest} (expedited shipping with {best_expedited_supplier})."
                 ),
                 fix_action=FixAction(
                     field="required_by_date",
@@ -104,10 +101,7 @@ def check_lead_time(
                     f"{days_until} days available. Expedited shipping "
                     f"({best_expedited} days) may be needed."
                 ),
-                proposed_fix=(
-                    f"Consider expedited shipping, or extend deadline to "
-                    f"{earliest_std}."
-                ),
+                proposed_fix=(f"Consider expedited shipping, or extend deadline to {earliest_std}."),
                 fix_action=FixAction(
                     field="required_by_date",
                     suggested_value=str(earliest_std),
