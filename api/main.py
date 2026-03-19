@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import AsyncIterator
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -26,6 +26,7 @@ from api.data_loader import DataStore
 from api.elevenlabs_client import get_elevenlabs_client
 from api.models import FormInput, ValidationResult
 from api.pipeline import process_request
+from api.policy_rag import rag_extract_policies, upload_policy_pdfs
 from api.ranking_models import (
     CleanOrderRecap,
     OrderConfirmation,
@@ -196,6 +197,45 @@ async def validate_request(form: FormInput) -> ValidationResult:
             status_code=503,
             detail="Our AI service is temporarily unavailable. Please try again in a moment.",
         )
+
+
+@app.post(
+    "/api/policies/upload",
+    dependencies=[Depends(verify_api_key)],
+    response_model=None,
+)
+async def upload_policy_documents(files: list[UploadFile] = File(...)) -> dict:
+    """
+    Upload one or more policy PDFs.
+    Server extracts text + builds a lightweight retrieval index in memory for this session.
+    """
+    if not files:
+        return {"docs": [], "chunk_count": 0}
+
+    payload: list[tuple[str, bytes, int]] = []
+    for f in files:
+        content = await f.read()
+        payload.append((f.filename or "policy.pdf", content, len(content)))
+
+    # Basic guard: only accept PDFs
+    for (name, _, _) in payload:
+        if not str(name).lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported for policy upload.")
+
+    return await upload_policy_pdfs(payload)
+
+
+class PolicyExtractRequest(BaseModel):
+    aspect_ids: list[str] | None = None
+
+
+@app.post(
+    "/api/policies/extract",
+    dependencies=[Depends(verify_api_key)],
+    response_model=None,
+)
+async def extract_policies(req: PolicyExtractRequest) -> dict:
+    return await rag_extract_policies(req.aspect_ids)
 
 
 @app.get("/api/categories")

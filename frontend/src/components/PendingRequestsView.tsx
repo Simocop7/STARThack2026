@@ -52,7 +52,11 @@ export default function PendingRequestsView({ onProcess, onRefuse, onNewManual }
     setRequests((prev) =>
       prev.map((r) => (r.id === req.id ? { ...r, status: "processing" } : r))
     );
-    fetch(`/api/employee/requests/${req.id}/status?status=processing`, { method: "PATCH" }).catch(() => {});
+    fetch(`/api/employee/requests/${req.id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "processing" }),
+    }).catch(() => {});
     onProcess(formData, req.id);
   }
 
@@ -60,7 +64,11 @@ export default function PendingRequestsView({ onProcess, onRefuse, onNewManual }
     setRequests((prev) =>
       prev.map((r) => (r.id === req.id ? { ...r, status: "refused" } : r))
     );
-    fetch(`/api/employee/requests/${req.id}/status?status=refused`, { method: "PATCH" }).catch(() => {});
+    fetch(`/api/employee/requests/${req.id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "refused" }),
+    }).catch(() => {});
     onRefuse(req.id);
   }
 

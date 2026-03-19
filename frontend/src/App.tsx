@@ -8,7 +8,7 @@ import VoiceDebugPanel from "./components/VoiceDebugPanel";
 import { isVoiceDebugMode } from "./lib/voiceLogger";
 
 type Role = "employee" | "office";
-type OfficeView = "inbox" | "process";
+type OfficeView = "inbox" | "process" | "orders" | "policies";
 type EmployeeView = "new-request" | "history";
 
 export default function App() {

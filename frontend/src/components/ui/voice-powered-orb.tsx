@@ -42,6 +42,7 @@ export const VoicePoweredOrb: FC<VoicePoweredOrbProps> = ({
   onVoiceDetected,
 }) => {
   const ctnDom = useRef<HTMLDivElement>(null);
+  const renderFailedRef = useRef(false);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -392,47 +393,58 @@ export const VoicePoweredOrb: FC<VoicePoweredOrbProps> = ({
         rafId = requestAnimationFrame(update);
         if (!program || !mesh || !gl || !renderer) return;
 
-        const dt = (t - lastTime) * 0.001;
-        lastTime = t;
+        try {
+          const dt = (t - lastTime) * 0.001;
+          lastTime = t;
 
-        program.uniforms.iTime.value = t * 0.001;
-        program.uniforms.hue.value = hue;
+          program.uniforms.iTime.value = t * 0.001;
+          program.uniforms.hue.value = hue;
 
-        let voiceLevel = 0;
-        if (enableVoiceControl) {
-          if (useExternalLevel) {
-            voiceLevel = Math.max(0, Math.min(1, externalLevelRef.current));
-            // Voice detected callback: keep it simple (auditable enough for UI).
-            onVoiceDetected?.(voiceLevel > 0.1);
-          } else if (isMicrophoneInitialized) {
-            voiceLevel = analyzeAudio();
-            onVoiceDetected?.(voiceLevel > 0.1);
+          let voiceLevel = 0;
+          if (enableVoiceControl) {
+            if (useExternalLevel) {
+              voiceLevel = Math.max(0, Math.min(1, externalLevelRef.current));
+              // Voice detected callback: keep it simple (auditable enough for UI).
+              onVoiceDetected?.(voiceLevel > 0.1);
+            } else if (isMicrophoneInitialized) {
+              voiceLevel = analyzeAudio();
+              onVoiceDetected?.(voiceLevel > 0.1);
+            }
+          } else {
+            onVoiceDetected?.(false);
           }
-        } else {
-          onVoiceDetected?.(false);
+
+          // Visual feedback: rotate and use hover uniforms.
+          if (enableVoiceControl) {
+            const voiceRotationSpeed = baseRotationSpeed + voiceLevel * maxRotationSpeed * 2.0;
+            // Rotate even at low volume so the overlay remains visibly animated
+            // even when volume tracking is unavailable/disabled.
+            currentRot += dt * voiceRotationSpeed;
+
+            program.uniforms.hover.value = Math.min(voiceLevel * 2.0, 1.0);
+            program.uniforms.hoverIntensity.value = Math.min(
+              voiceLevel * maxHoverIntensity * 0.8,
+              maxHoverIntensity,
+            );
+          } else {
+            program.uniforms.hover.value = 0;
+            program.uniforms.hoverIntensity.value = 0;
+          }
+
+          program.uniforms.rot.value = currentRot;
+
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+          renderer.render({ scene: mesh });
+        } catch (err) {
+          console.error("VoicePoweredOrb render frame error:", err);
+          renderFailedRef.current = true;
+          cancelAnimationFrame(rafId);
+          while (container.firstChild) container.removeChild(container.firstChild);
+          const fallback = document.createElement("div");
+          fallback.className =
+            "w-full h-full rounded-full bg-gradient-to-br from-red-600/30 via-black/20 to-red-900/40 border border-red-300/20 shadow-[inset_0_0_40px_rgba(239,68,68,0.25)]";
+          container.appendChild(fallback);
         }
-
-        // Visual feedback: rotate and use hover uniforms.
-        if (enableVoiceControl) {
-          const voiceRotationSpeed = baseRotationSpeed + voiceLevel * maxRotationSpeed * 2.0;
-          // Rotate even at low volume so the overlay remains visibly animated
-          // even when volume tracking is unavailable/disabled.
-          currentRot += dt * voiceRotationSpeed;
-
-          program.uniforms.hover.value = Math.min(voiceLevel * 2.0, 1.0);
-          program.uniforms.hoverIntensity.value = Math.min(
-            voiceLevel * maxHoverIntensity * 0.8,
-            maxHoverIntensity,
-          );
-        } else {
-          program.uniforms.hover.value = 0;
-          program.uniforms.hoverIntensity.value = 0;
-        }
-
-        program.uniforms.rot.value = currentRot;
-
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        renderer.render({ scene: mesh });
       };
 
       rafId = requestAnimationFrame(update);
@@ -459,7 +471,12 @@ export const VoicePoweredOrb: FC<VoicePoweredOrbProps> = ({
       };
     } catch (error) {
       console.error("VoicePoweredOrb initialization error:", error);
+      renderFailedRef.current = true;
       if (container.firstChild) container.removeChild(container.firstChild);
+      const fallback = document.createElement("div");
+      fallback.className =
+        "w-full h-full rounded-full bg-gradient-to-br from-red-600/30 via-black/20 to-red-900/40 border border-red-300/20 shadow-[inset_0_0_40px_rgba(239,68,68,0.25)]";
+      container.appendChild(fallback);
       return () => {};
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -2,12 +2,12 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   PlusCircle, History, Inbox, PenLine,
-  FileText, Settings, CircleUserRound,
+  FileText, Settings, CircleUserRound, ClipboardList,
   ChevronDown, Menu, X, LogOut, Building2,
 } from "lucide-react";
 
 type Role = "employee" | "office";
-type OfficeView = "inbox" | "process";
+type OfficeView = "inbox" | "process" | "orders" | "policies";
 type EmployeeView = "new-request" | "history";
 
 interface AppShellProps {
@@ -135,6 +135,12 @@ function SidebarContent({
         onClick: () => onNavigate("office", "inbox"),
       },
       {
+        icon: <ClipboardList className="w-4 h-4" />,
+        label: "Orders",
+        active: isOffice && officeView === "orders",
+        onClick: () => onNavigate("office", "orders"),
+      },
+      {
         icon: <PenLine className="w-4 h-4" />,
         label: "Write New Request",
         active: isOffice && officeView === "process",
@@ -149,8 +155,9 @@ function SidebarContent({
       {
         icon: <FileText className="w-4 h-4" />,
         label: "Policies",
-        disabled: true,
-        onClick: () => {},
+        active: isOffice && officeView === "policies",
+        disabled: !isOffice,
+        onClick: () => onNavigate("office", "policies"),
       },
       {
         icon: <Settings className="w-4 h-4" />,

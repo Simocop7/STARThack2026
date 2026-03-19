@@ -7,6 +7,8 @@ import ValidationBanner from "./ValidationBanner";
 import SupplierRankingView from "./SupplierRankingView";
 import OrderConfirmationView from "./OrderConfirmationView";
 import OrderRecapView from "./OrderRecapView";
+import OfficeOrdersView from "./OfficeOrdersView";
+import OfficePoliciesView from "./OfficePoliciesView";
 import VoiceConversation from "./VoiceConversation";
 import PendingRequestsView from "./PendingRequestsView";
 import { t } from "../i18n";
@@ -21,7 +23,7 @@ import type {
 import type { VoiceInputHandle } from "./VoiceInput";
 
 type ConversationPhase = "idle" | "speaking" | "listening" | "processing";
-type OfficePhase = "inbox" | "process";
+type OfficePhase = "inbox" | "process" | "orders" | "policies";
 
 interface Props {
   onBack: () => void;
@@ -49,6 +51,9 @@ export default function ProcurementPortal({ onBack, externalPhase, onPhaseChange
   // Employee request tracking
   const [activeEmpRequestId, setActiveEmpRequestId] = useState<string | null>(null);
 
+  // Store all orders placed by the office session.
+  const [orders, setOrders] = useState<OrderConfirmation[]>([]);
+
   // Voice conversation state
   const [voiceMode, setVoiceMode] = useState(false);
   const [ttsText, setTtsText] = useState<string | null>(null);
@@ -61,14 +66,21 @@ export default function ProcurementPortal({ onBack, externalPhase, onPhaseChange
   useEffect(() => {
     if (!externalPhase || externalPhase === officePhase) return;
     if (externalPhase === "inbox") {
+      // Switching away from verification shouldn't wipe the current validation/ranking state.
       setOfficePhase("inbox");
-      setResult(null); setRanking(null); setOrderConfirmation(null);
-      setError(null); setSelectedSupplier(null);
+      setVoiceMode(false);
+      setTtsText(null);
+      setConversationPhase("idle");
     } else if (externalPhase === "process") {
-      setActiveEmpRequestId(null);
-      setFormData(null); setResult(null); setRanking(null);
-      setOrderConfirmation(null); setError(null);
       setOfficePhase("process");
+      // Keep current form under verification (if any) so users can return without re-running.
+    } else if (externalPhase === "orders") {
+      setOfficePhase("orders");
+    } else if (externalPhase === "policies") {
+      setOfficePhase("policies");
+      setVoiceMode(false);
+      setTtsText(null);
+      setConversationPhase("idle");
     }
   // externalPhase is the only trigger we care about
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -269,9 +281,16 @@ export default function ProcurementPortal({ onBack, externalPhase, onPhaseChange
         const conf: OrderConfirmation = await res.json();
         setOrderConfirmation(conf);
         setSelectedSupplier(null);
+        // Append to office orders list (newest first).
+        setOrders((prev) => {
+          if (prev.some((o) => o.order_id === conf.order_id)) return prev;
+          return [conf, ...prev];
+        });
         if (activeEmpRequestId) {
-          fetch(`/api/employee/requests/${activeEmpRequestId}/status?status=completed`, {
+          fetch(`/api/employee/requests/${activeEmpRequestId}/status`, {
             method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "completed" }),
           }).catch(() => {});
         }
       } else {
@@ -291,8 +310,10 @@ export default function ProcurementPortal({ onBack, externalPhase, onPhaseChange
 
   function handleRefuseDuringProcessing() {
     if (activeEmpRequestId) {
-      fetch(`/api/employee/requests/${activeEmpRequestId}/status?status=refused`, {
+      fetch(`/api/employee/requests/${activeEmpRequestId}/status`, {
         method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "refused" }),
       }).catch(() => {});
     }
     setResult(null);
@@ -377,10 +398,10 @@ export default function ProcurementPortal({ onBack, externalPhase, onPhaseChange
               <button
                 onClick={() => {
                   setOfficePhase("inbox");
-                  setResult(null);
-                  setRanking(null);
-                  setOrderConfirmation(null);
                   setError(null);
+                  setVoiceMode(false);
+                  setTtsText(null);
+                  setConversationPhase("idle");
                 }}
                 className="text-sm text-red-600 hover:text-red-800 font-medium flex items-center gap-1"
               >
@@ -482,6 +503,12 @@ export default function ProcurementPortal({ onBack, externalPhase, onPhaseChange
             )}
           </>
         )}
+
+        {/* ── Orders store view ── */}
+        {officePhase === "orders" && <OfficeOrdersView orders={orders} />}
+
+        {/* ── Policies view ── */}
+        {officePhase === "policies" && <OfficePoliciesView />}
       </main>
     </div>
   );

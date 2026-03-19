@@ -212,6 +212,8 @@ export default function RequestForm({
 
   // Stable ref to always call the latest handleVoiceTranscript (avoids stale closure in forceTranscript)
   const handleVoiceTranscriptRef = useRef<(transcript: string) => void>(() => {});
+  // When true, a force transcript should only parse/fill form and must not continue voice conversation.
+  const suppressVoiceFlowRef = useRef(false);
 
   const pendingAutoSubmit = useRef(false);
 
@@ -327,12 +329,15 @@ export default function RequestForm({
   }
 
   async function handleVoiceTranscript(transcript: string) {
+    const suppressVoiceFlow = suppressVoiceFlowRef.current;
+    suppressVoiceFlowRef.current = false;
+
     setVoiceParsing(true);
     setVoiceError(null);
     setMissingFields([]);
 
     // Activate voice mode on first voice input
-    if (!voiceMode) {
+    if (!voiceMode && !suppressVoiceFlow) {
       onVoiceModeChange(true);
     }
 
@@ -385,16 +390,36 @@ export default function RequestForm({
       return updated;
     });
 
-    // Check which required fields are still missing
-    const stillMissing: string[] = [];
-    if (!updatedForm.quantity) stillMissing.push("quantity");
-    if (!updatedForm.required_by_date) stillMissing.push("delivery date");
-    if (!updatedForm.delivery_country) stillMissing.push("delivery_country");
+    // Check required fields still missing:
+    // - Keep technical keys for follow-up generation
+    // - Show friendly labels in UI
+    const stillMissingTechnical: string[] = [];
+    const stillMissingFriendly: string[] = [];
 
-    setMissingFields(stillMissing);
+    if (!updatedForm.request_text.trim()) {
+      stillMissingTechnical.push("request_text");
+      stillMissingFriendly.push(i.requestDescription);
+    }
+    if (!updatedForm.quantity) {
+      stillMissingTechnical.push("quantity");
+      stillMissingFriendly.push(i.quantity);
+    }
+    if (!updatedForm.required_by_date) {
+      stillMissingTechnical.push("delivery date");
+      stillMissingFriendly.push(i.requiredByDate);
+    }
+    if (!updatedForm.delivery_country) {
+      stillMissingTechnical.push("delivery_country");
+      stillMissingFriendly.push(i.deliveryCountry);
+    }
 
-    if (overlayActive) {
-      onMissingFieldsDetected?.(stillMissing);
+    setMissingFields(stillMissingFriendly);
+
+    if (suppressVoiceFlow) {
+      // Manual "Done" path: parse/fill only, don't reopen/continue conversation.
+      // Also avoid autosubmit in this mode.
+    } else if (overlayActive) {
+      onMissingFieldsDetected?.(stillMissingTechnical);
     } else if (voiceMode) {
       pendingAutoSubmit.current = true;
     }
@@ -407,7 +432,10 @@ export default function RequestForm({
 
   // Register force-transcript callback for parent to bypass VoiceInput
   useEffect(() => {
-    onRegisterForceTranscript?.((transcript: string) => handleVoiceTranscriptRef.current(transcript));
+    onRegisterForceTranscript?.((transcript: string) => {
+      suppressVoiceFlowRef.current = true;
+      handleVoiceTranscriptRef.current(transcript);
+    });
   }, [onRegisterForceTranscript]);
 
   const [fieldErrors, setFieldErrors] = useState<Set<string>>(new Set());
