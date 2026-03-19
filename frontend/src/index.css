@@ -115,9 +115,9 @@
   align-items: center;
   gap: 10px;
   padding: 13px 44px;
-  border: 1px solid rgba(129, 140, 248, 0.45);
+  border: 1px solid rgba(239, 68, 68, 0.50);
   border-radius: 9999px;
-  background: rgba(99, 102, 241, 0.08);
+  background: rgba(220, 38, 38, 0.08);
   backdrop-filter: blur(10px);
   color: rgba(255, 255, 255, 0.92);
   font-size: 0.9rem;
@@ -129,9 +129,9 @@
 }
 
 .hero-enter-btn:hover {
-  background: rgba(99, 102, 241, 0.22);
-  border-color: rgba(129, 140, 248, 0.75);
-  box-shadow: 0 0 38px rgba(99, 102, 241, 0.35), 0 0 8px rgba(129, 140, 248, 0.2);
+  background: rgba(220, 38, 38, 0.20);
+  border-color: rgba(239, 68, 68, 0.85);
+  box-shadow: 0 0 38px rgba(220, 38, 38, 0.35), 0 0 10px rgba(239, 68, 68, 0.15);
 }
 
 /* Bouncing arrow inside Enter button */

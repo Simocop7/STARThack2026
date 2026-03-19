@@ -36,8 +36,8 @@ function PostProcessing({
     const uvY      = uv().y;
     const scanLine = smoothstep(0, float(0.05), abs(uvY.sub(float(uScanProgress.value))));
 
-    // indigo scan overlay instead of red
-    const indigoOverlay = vec3(0.5, 0.55, 1.0).mul(oneMinus(scanLine)).mul(0.35);
+    // red scan overlay (black, red, white palette)
+    const indigoOverlay = vec3(1.0, 0.08, 0.08).mul(oneMinus(scanLine)).mul(0.35);
 
     const withScan = mix(
       scenePassColor,
@@ -84,8 +84,8 @@ function SceneMesh() {
     const dot        = float(smoothstep(0.5, 0.49, dist)).mul(brightness);
     const flow       = oneMinus(smoothstep(0, 0.02, abs(tDepthMap.r.sub(uProgress))));
 
-    // indigo/blue glow instead of red
-    const mask  = dot.mul(flow).mul(vec3(2, 3, 10));
+    // red particle glow
+    const mask  = dot.mul(flow).mul(vec3(10, 1, 1));
     const final = blendScreen(tMap, mask);
 
     const mat = new (THREE as never as Record<string, new (p: object) => never>).MeshBasicNodeMaterial({
@@ -199,7 +199,7 @@ export default function HeroPage({ onEnter }: HeroPageProps) {
 
       {/* ChainIQ badge top-left */}
       <div className="absolute top-6 left-8 z-20 flex items-center gap-2.5 opacity-0 hero-fade-in" style={{ animationDelay: '0.1s' }}>
-        <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-lg shadow-indigo-900/50">
+        <div className="w-7 h-7 rounded-lg bg-red-600 flex items-center justify-center text-white text-xs font-bold shadow-lg shadow-red-900/50">
           C
         </div>
         <span className="text-white/70 text-sm font-semibold tracking-widest uppercase">ChainIQ</span>
@@ -207,7 +207,7 @@ export default function HeroPage({ onEnter }: HeroPageProps) {
 
       {/* WebGPU Canvas — shown only on supported browsers */}
       {webgpuOk === false ? (
-        <StaticFallback />
+        <div className="absolute inset-0 bg-gradient-to-br from-black via-red-950/20 to-black" />
       ) : (
         <Canvas
           flat
