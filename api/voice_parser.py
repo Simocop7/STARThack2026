@@ -83,7 +83,7 @@ IMPORTANT:
 - For countable items (e.g. laptops, lightbulbs, chairs, licenses), the unit_of_measure is obvious ("unit", "device", etc.) — you can auto-fill it or leave it null; do NOT add it to missing_fields.
 - For items measured by weight, volume, length, or time (e.g. flour, cable, consulting hours), unit_of_measure is critical. If the user did not specify it, set unit_of_measure to null and ADD "unit_of_measure" to missing_fields.
 - If quantity is not mentioned, set it to null
-- missing_fields should include things like "budget" if not mentioned — but only truly important procurement fields"""
+- missing_fields should only include: "quantity", "required_by_date", "unit_of_measure" (when applicable). Do NOT include "budget" — budget is calculated by the system, not provided by the user."""
 
     response = await client.chat.completions.create(
         model=deployment,

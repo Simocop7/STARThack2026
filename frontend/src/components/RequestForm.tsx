@@ -194,15 +194,12 @@ export default function RequestForm({
         return updated;
       });
 
-      if (parsed.missing_fields?.length) {
-        setMissingFields(parsed.missing_fields);
-      }
-
-      // Check which required fields are still missing after merge
-      // Note: category is NOT required here — it gets auto-detected by /api/validate
+      // Check which required fields are still missing based on actual form state
+      // (don't trust parsed.missing_fields — the LLM may report fields as missing even when extracted)
       const stillMissing: string[] = [];
       if (!updatedForm.quantity) stillMissing.push("quantity");
       if (!updatedForm.required_by_date) stillMissing.push("delivery date");
+      setMissingFields(stillMissing);
 
       if (overlayActive) {
         // In overlay mode: notify parent about missing fields

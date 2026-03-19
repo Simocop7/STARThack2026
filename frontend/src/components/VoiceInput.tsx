@@ -97,9 +97,15 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
       setInterim("");
     }, [onTranscript]);
 
-    const startListening = useCallback(() => {
+    const startListening = useCallback((retryCount = 0) => {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) return;
+
+      // Clean up any lingering previous session
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch { /* ignore */ }
+        recognitionRef.current = null;
+      }
 
       const recognition = new SpeechRecognition();
       // In overlay mode (autoStopOnSilence), use non-continuous so browser
@@ -176,6 +182,10 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
       try {
         recognition.start();
       } catch {
+        // Browser may not be ready (e.g. previous session still closing) — retry once after a short delay
+        if (retryCount < 2) {
+          setTimeout(() => startListening(retryCount + 1), 300);
+        }
         return;
       }
       setListening(true);
