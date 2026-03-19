@@ -11,6 +11,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime as dt
 from datetime import timezone
+from pathlib import Path
 from typing import AsyncIterator
 
 from dotenv import load_dotenv
@@ -89,16 +90,28 @@ async def rate_limit_middleware(request: Request, call_next):
             timestamps.append(now)
             _request_log[client_ip] = timestamps
 
-            # Evict stale IPs when the dict grows too large
+            # Evict stale IPs to bound memory usage
             if len(_request_log) > _MAX_TRACKED_IPS:
                 stale_ips = [ip for ip, ts in _request_log.items() if not ts or ts[-1] <= window_start]
                 for ip in stale_ips:
                     del _request_log[ip]
+                # Hard cap: if still too large after pruning stale, drop oldest entries
+                if len(_request_log) > _MAX_TRACKED_IPS:
+                    sorted_ips = sorted(_request_log.items(), key=lambda kv: kv[1][-1] if kv[1] else 0)
+                    for ip, _ in sorted_ips[: len(_request_log) - _MAX_TRACKED_IPS]:
+                        del _request_log[ip]
 
     return await call_next(request)
 
 
-_allowed_origins = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
+_allowed_origins = [
+    o.strip()
+    for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
+    if o.strip() and o.strip() != "*"
+]
+if not _allowed_origins:
+    _allowed_origins = ["http://localhost:5173"]
+    logger.warning("CORS_ORIGINS was empty or wildcard '*' — falling back to localhost only")
 
 app.add_middleware(
     CORSMiddleware,
@@ -288,6 +301,7 @@ async def rank_suppliers_custom(
 # ── Employee Request Store ───────────────────────────────────────────────────
 
 _employee_requests: list[dict] = []
+_MAX_EMPLOYEE_REQUESTS = 10_000
 
 
 class EmployeeFormInput(BaseModel):
@@ -304,7 +318,7 @@ class EmployeeFormInput(BaseModel):
     enriched_data: dict | None = None
 
 
-@app.post("/api/employee/submit")
+@app.post("/api/employee/submit", dependencies=[Depends(verify_api_key)])
 async def submit_employee_request(req: EmployeeFormInput) -> dict:
     """Store an employee procurement request for the office to process.
 
@@ -329,20 +343,45 @@ async def submit_employee_request(req: EmployeeFormInput) -> dict:
         "enriched_data": req.enriched_data,
     }
     _employee_requests.append(record)
+    # Evict oldest requests when store exceeds capacity
+    if len(_employee_requests) > _MAX_EMPLOYEE_REQUESTS:
+        _employee_requests[:] = _employee_requests[-_MAX_EMPLOYEE_REQUESTS:]
     return {"request_id": emp_id, "status": "pending"}
 
 
-@app.get("/api/employee/requests")
+@app.get("/api/employee/requests", dependencies=[Depends(verify_api_key)])
 async def get_employee_requests() -> dict:
     """Return all submitted employee requests (newest first)."""
     return {"requests": list(reversed(_employee_requests))}
 
 
-@app.patch("/api/employee/requests/{emp_id}/status")
-async def update_employee_request_status(emp_id: str, status: str) -> dict:
+_VALID_EMPLOYEE_STATUSES = {"pending", "approved", "rejected", "in_review", "completed"}
+
+
+class StatusUpdate(BaseModel):
+    status: str = Field(..., min_length=1, max_length=50)
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        v = v.strip().lower()
+        if v not in _VALID_EMPLOYEE_STATUSES:
+            raise ValueError(
+                f"Invalid status '{v}'. Must be one of: {', '.join(sorted(_VALID_EMPLOYEE_STATUSES))}"
+            )
+        return v
+
+
+@app.patch(
+    "/api/employee/requests/{emp_id}/status",
+    dependencies=[Depends(verify_api_key)],
+)
+async def update_employee_request_status(emp_id: str, body: StatusUpdate) -> dict:
+    if not re.match(r"^EMP-[A-F0-9]{8}$", emp_id):
+        raise HTTPException(status_code=400, detail="Invalid employee request ID format")
     for r in _employee_requests:
         if r["id"] == emp_id:
-            r["status"] = status
+            r["status"] = body.status
             return {"ok": True}
     raise HTTPException(status_code=404, detail="Request not found")
 
@@ -399,3 +438,25 @@ async def place_order(order: OrderRequest) -> OrderConfirmation:
         notes=order.notes,
         next_steps=next_steps,
     )
+
+
+# ---------------------------------------------------------------------------
+# Serve frontend static files in production (when frontend/dist exists)
+# ---------------------------------------------------------------------------
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+_STATIC_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+if _STATIC_DIR.is_dir():
+    _ASSETS_DIR = _STATIC_DIR / "assets"
+    if _ASSETS_DIR.is_dir():
+        app.mount("/assets", StaticFiles(directory=_ASSETS_DIR), name="static-assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """SPA fallback: serve static files or index.html for client-side routing."""
+        file_path = _STATIC_DIR / full_path
+        if full_path and file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(_STATIC_DIR / "index.html")

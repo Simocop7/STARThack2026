@@ -38,6 +38,12 @@ interface Props {
   onTranscript: (transcript: string) => void;
   onParsing: (parsing: boolean) => void;
   disabled?: boolean;
+  /** Hide the inline UI (overlay handles visuals) but keep imperative ref working */
+  hidden?: boolean;
+  /** Called with interim transcript text as user speaks */
+  onInterimChange?: (text: string) => void;
+  /** Auto-stop after silence once user has spoken (for one-shot overlay mode) */
+  autoStopOnSilence?: boolean;
 }
 
 export interface VoiceInputHandle {
@@ -47,12 +53,16 @@ export interface VoiceInputHandle {
 }
 
 const VoiceInput = forwardRef<VoiceInputHandle, Props>(
-  ({ language, onTranscript, onParsing, disabled }, ref) => {
+  ({ language, onTranscript, onParsing, disabled, hidden, onInterimChange, autoStopOnSilence }, ref) => {
     const [listening, setListening] = useState(false);
     const [interim, setInterim] = useState("");
     const [supported, setSupported] = useState(true);
     const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
     const finalTranscriptRef = useRef("");
+    const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastTranscriptChangeRef = useRef<number>(0);
+    const maxDurationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const inactivityTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     useEffect(() => {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -62,6 +72,18 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
     }, []);
 
     const stopListening = useCallback(() => {
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+      if (maxDurationTimerRef.current) {
+        clearTimeout(maxDurationTimerRef.current);
+        maxDurationTimerRef.current = null;
+      }
+      if (inactivityTimerRef.current) {
+        clearInterval(inactivityTimerRef.current);
+        inactivityTimerRef.current = null;
+      }
       if (recognitionRef.current) {
         recognitionRef.current.stop();
         recognitionRef.current = null;
@@ -75,11 +97,16 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
       if (!SpeechRecognition) return;
 
       const recognition = new SpeechRecognition();
-      recognition.continuous = true;
+      // In overlay mode (autoStopOnSilence), use non-continuous so browser
+      // automatically stops after one utterance and fires onend
+      recognition.continuous = !autoStopOnSilence;
       recognition.interimResults = true;
       recognition.lang = LANG_MAP[language] || "en-US";
 
       finalTranscriptRef.current = "";
+      lastTranscriptChangeRef.current = Date.now();
+
+      let lastSeenTranscript = "";
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
         let interimText = "";
@@ -99,7 +126,28 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
         if (finalText) {
           finalTranscriptRef.current += finalText;
         }
+
+        // Track when the transcript actually changes (for inactivity detection)
+        const currentFullTranscript = finalTranscriptRef.current + interimText;
+        if (currentFullTranscript !== lastSeenTranscript) {
+          lastSeenTranscript = currentFullTranscript;
+          lastTranscriptChangeRef.current = Date.now();
+        }
+
         setInterim(interimText);
+        onInterimChange?.(currentFullTranscript);
+
+        // Auto-stop after silence: when we get a final result, start a timer.
+        // If new speech arrives, the timer resets. If silence persists, stop.
+        if (autoStopOnSilence && finalTranscriptRef.current.trim()) {
+          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+          silenceTimerRef.current = setTimeout(() => {
+            if (recognitionRef.current) {
+              recognitionRef.current.stop();
+              recognitionRef.current = null;
+            }
+          }, 1500);
+        }
       };
 
       recognition.onerror = (event: { error: string }) => {
@@ -121,7 +169,28 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
       recognitionRef.current = recognition;
       recognition.start();
       setListening(true);
-    }, [language, onTranscript, stopListening]);
+
+      // Overlay mode: add safety-net timers that don't depend on isFinal
+      if (autoStopOnSilence) {
+        // Max duration: force-stop after 15s no matter what
+        maxDurationTimerRef.current = setTimeout(() => {
+          if (recognitionRef.current) {
+            recognitionRef.current.stop();
+            recognitionRef.current = null;
+          }
+        }, 15000);
+
+        // Inactivity: stop if transcript hasn't changed for 2.5s
+        // (handles noisy rooms where interim results keep coming but text doesn't change)
+        inactivityTimerRef.current = setInterval(() => {
+          const elapsed = Date.now() - lastTranscriptChangeRef.current;
+          if (elapsed > 2500 && recognitionRef.current) {
+            recognitionRef.current.stop();
+            recognitionRef.current = null;
+          }
+        }, 500);
+      }
+    }, [language, onTranscript, onInterimChange, stopListening, autoStopOnSilence]);
 
     const toggleListening = useCallback(() => {
       if (listening) {
@@ -137,7 +206,7 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
       isListening: listening,
     }), [startListening, stopListening, listening]);
 
-    if (!supported) return null;
+    if (!supported || hidden) return null;
 
     return (
       <div className="flex flex-col gap-2">

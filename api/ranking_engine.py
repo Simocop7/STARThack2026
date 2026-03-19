@@ -485,8 +485,7 @@ def _score_suppliers(
         return []
 
     prices = [c["_total"] for c in eligible]
-    min_price, max_price = min(prices), max(prices)
-    _ = max_price - min_price if max_price != min_price else 1.0  # kept for clarity
+    min_price = min(prices)
 
     scored: list[dict[str, Any]] = []
 

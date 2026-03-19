@@ -15,6 +15,10 @@ interface Props {
   onStop: () => void;
   /** Current phase override from parent (e.g. "listening", "processing") */
   externalPhase?: ConversationPhase;
+  /** Hide the banner UI (overlay handles visuals) */
+  hidden?: boolean;
+  /** Called when TTS audio actually starts playing */
+  onSpeakingStart?: () => void;
 }
 
 export default function VoiceConversation({
@@ -24,6 +28,8 @@ export default function VoiceConversation({
   onPlaybackEnd,
   onStop,
   externalPhase,
+  hidden,
+  onSpeakingStart,
 }: Props) {
   const [phase, setPhase] = useState<ConversationPhase>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +101,7 @@ export default function VoiceConversation({
         };
 
         await audio.play();
+        if (!cancelled) onSpeakingStart?.();
       } catch {
         if (!cancelled) {
           setPhase("idle");
@@ -132,7 +139,9 @@ export default function VoiceConversation({
     onStop();
   }, [onStop]);
 
+  // When hidden, still render (so hooks/effects run) but visually invisible
   if (!active) return null;
+  if (hidden) return <div style={{ display: "none" }} />;
 
   const displayPhase = phase;
 

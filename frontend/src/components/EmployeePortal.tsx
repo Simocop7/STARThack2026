@@ -1,19 +1,24 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import CategoryDisambiguation from "./CategoryDisambiguation";
 import EmployeeReviewStep from "./EmployeeReviewStep";
 import RequestForm from "./RequestForm";
 import ValidationBanner from "./ValidationBanner";
 import VoiceConversation from "./VoiceConversation";
+import VoiceOverlay from "./VoiceOverlay";
+import { useAudioAnalyser } from "../hooks/useAudioAnalyser";
 import { t } from "../i18n";
 import type {
   FormData,
   ValidationResult,
-  EnrichedRequest,
 } from "../types";
 import type { VoiceInputHandle } from "./VoiceInput";
 
 type Phase = "form" | "review" | "submitted";
 type ConversationPhase = "idle" | "speaking" | "listening" | "processing";
+type OverlayPhase = "listening" | "processing" | "speaking" | "closing";
+
+const VOICE_CONFIRMATION_TEXT =
+  "Sure, I'm processing your request and inserting it into the form now.";
 
 interface Props {
   onBack: () => void;
@@ -44,7 +49,100 @@ export default function EmployeePortal({ onBack }: Props) {
   const [conversationPhase, setConversationPhase] = useState<ConversationPhase>("idle");
   const voiceInputRef = useRef<VoiceInputHandle | null>(null);
 
+  // Overlay state
+  const [overlayActive, setOverlayActive] = useState(false);
+  const [overlayPhase, setOverlayPhase] = useState<OverlayPhase>("listening");
+  const [interimTranscript, setInterimTranscript] = useState("");
+
+  const volumeLevel = useAudioAnalyser(overlayActive);
+
   const i = t(language);
+
+  // ── Activate voice overlay (one-shot flow) ──────────────────
+  const handleActivateVoice = useCallback(() => {
+    // Micro-interaction: haptic feedback
+    if (navigator.vibrate) navigator.vibrate(50);
+
+    setOverlayActive(true);
+    setOverlayPhase("listening");
+    setInterimTranscript("");
+    setVoiceMode(true);
+    setTtsText(null);
+    setConversationPhase("idle");
+
+    // Start listening after a brief delay for overlay to mount
+    setTimeout(() => {
+      voiceInputRef.current?.startListening();
+    }, 300);
+  }, []);
+
+  // ── Close overlay ───────────────────────────────────────────
+  const handleOverlayClose = useCallback(() => {
+    setOverlayPhase("closing");
+    voiceInputRef.current?.stopListening();
+    setTimeout(() => {
+      setOverlayActive(false);
+      setVoiceMode(false);
+      setTtsText(null);
+      setConversationPhase("idle");
+      setInterimTranscript("");
+    }, 400);
+  }, []);
+
+  // ── Called when VoiceInput produces a final transcript ───────
+  // In the one-shot flow: immediately trigger the confirmation TTS
+  const handleVoiceTranscriptForOverlay = useCallback(() => {
+    // Transition to processing briefly, then to speaking
+    setOverlayPhase("processing");
+    setInterimTranscript("");
+
+    // Set the hardcoded confirmation TTS immediately
+    setTimeout(() => {
+      setTtsText(VOICE_CONFIRMATION_TEXT);
+      setConversationPhase("speaking");
+    }, 500);
+  }, []);
+
+  // ── Called when TTS audio starts playing ────────────────────
+  const handleSpeakingStart = useCallback(() => {
+    setOverlayPhase("speaking");
+  }, []);
+
+  // ── Called when TTS playback ends ───────────────────────────
+  const handlePlaybackEnd = useCallback(() => {
+    if (!voiceMode) return;
+
+    if (overlayActive) {
+      // One-shot flow: close overlay after confirmation speech
+      setOverlayPhase("closing");
+      setTimeout(() => {
+        setOverlayActive(false);
+        setVoiceMode(false);
+        setTtsText(null);
+        setConversationPhase("idle");
+      }, 400);
+      return;
+    }
+
+    // Legacy non-overlay flow (fallback)
+    if (result?.is_valid) {
+      setConversationPhase("idle");
+      return;
+    }
+    setConversationPhase("listening");
+    setTimeout(() => {
+      voiceInputRef.current?.startListening();
+    }, 300);
+  }, [voiceMode, overlayActive, result?.is_valid]);
+
+  const handleVoiceStop = useCallback(() => {
+    setVoiceMode(false);
+    setTtsText(null);
+    setConversationPhase("idle");
+    setOverlayActive(false);
+    setInterimTranscript("");
+    voiceInputRef.current?.stopListening();
+  }, []);
 
   // ── Validate request ────────────────────────────────────────────
   async function handleSubmit(data: FormData) {
@@ -54,9 +152,12 @@ export default function EmployeePortal({ onBack }: Props) {
     setLoading(true);
     setResult(null);
     setError(null);
-    setTtsText(null);
 
-    if (voiceMode) setConversationPhase("processing");
+    // In overlay mode, don't set ttsText from validation — it's already set
+    if (voiceMode && !overlayActive) {
+      setConversationPhase("processing");
+      setTtsText(null);
+    }
 
     try {
       const body: Record<string, unknown> = {
@@ -80,7 +181,7 @@ export default function EmployeePortal({ onBack }: Props) {
       if (!res.ok) {
         const detail = await res.text();
         setError(`Validation failed (${res.status}): ${detail}`);
-        if (voiceMode) setConversationPhase("idle");
+        if (voiceMode && !overlayActive) setConversationPhase("idle");
         return;
       }
 
@@ -108,14 +209,15 @@ export default function EmployeePortal({ onBack }: Props) {
         setPhase("review");
       }
 
-      if (voiceMode && json.user_message?.summary) {
+      // Only set TTS from validation if NOT in overlay mode
+      if (voiceMode && !overlayActive && json.user_message?.summary) {
         setTtsText(json.user_message.summary);
-      } else if (voiceMode) {
+      } else if (voiceMode && !overlayActive) {
         setConversationPhase("idle");
       }
     } catch {
       setError(i.networkError);
-      if (voiceMode) setConversationPhase("idle");
+      if (voiceMode && !overlayActive) setConversationPhase("idle");
     } finally {
       setLoading(false);
     }
@@ -163,7 +265,6 @@ export default function EmployeePortal({ onBack }: Props) {
 
   // ── Go back to form from review ────────────────────────────────
   function handleEditFromReview() {
-    // Pre-fill form with enriched categories if the user left them empty
     if (result?.enriched_request && formData) {
       const enriched = result.enriched_request;
       setFormData({
@@ -191,9 +292,10 @@ export default function EmployeePortal({ onBack }: Props) {
     setVoiceMode(false);
     setTtsText(null);
     setConversationPhase("idle");
+    setOverlayActive(false);
+    setInterimTranscript("");
   }
 
-  // Compute which fields the LLM auto-detected
   function getAutoDetectedFields(): string[] {
     if (!originalFormData || !result?.enriched_request) return [];
     const fields: string[] = [];
@@ -203,35 +305,35 @@ export default function EmployeePortal({ onBack }: Props) {
     if (!originalFormData.category_l2 && result.enriched_request.category_l2) {
       fields.push("category_l2");
     }
-    // delivery_country is always auto-detected from address
     if (result.enriched_request.delivery_country) {
       fields.push("delivery_country");
     }
     return fields;
   }
 
-
-  const handlePlaybackEnd = () => {
-    if (!voiceMode) return;
-    if (result?.is_valid) {
-      setConversationPhase("idle");
-      return;
-    }
-    setConversationPhase("listening");
-    setTimeout(() => {
-      voiceInputRef.current?.startListening();
-    }, 300);
-  };
-
-  const handleVoiceStop = () => {
-    setVoiceMode(false);
-    setTtsText(null);
-    setConversationPhase("idle");
-    voiceInputRef.current?.stopListening();
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Voice Overlay */}
+      <VoiceOverlay
+        active={overlayActive}
+        phase={overlayPhase}
+        volumeLevel={volumeLevel}
+        interimTranscript={interimTranscript}
+        onClose={handleOverlayClose}
+      />
+
+      {/* VoiceConversation — hidden when overlay active, but TTS logic still runs */}
+      <VoiceConversation
+        textToSpeak={ttsText}
+        language={language}
+        active={voiceMode}
+        onPlaybackEnd={handlePlaybackEnd}
+        onStop={handleVoiceStop}
+        externalPhase={conversationPhase}
+        hidden={overlayActive}
+        onSpeakingStart={handleSpeakingStart}
+      />
+
       <header className="bg-white border-b border-gray-200 px-6 py-4 print:hidden">
         <div className="max-w-4xl mx-auto flex items-center gap-3">
           <button onClick={onBack} className="text-gray-400 hover:text-gray-600 transition-colors mr-1">
@@ -250,15 +352,6 @@ export default function EmployeePortal({ onBack }: Props) {
       </header>
 
       <main className="max-w-4xl mx-auto py-8 px-6">
-        <VoiceConversation
-          textToSpeak={ttsText}
-          language={language}
-          active={voiceMode}
-          onPlaybackEnd={handlePlaybackEnd}
-          onStop={handleVoiceStop}
-          externalPhase={conversationPhase}
-        />
-
         {/* Error */}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
@@ -279,7 +372,7 @@ export default function EmployeePortal({ onBack }: Props) {
           </div>
         )}
 
-        {/* ── Phase: Submitted ── */}
+        {/* Phase: Submitted */}
         {!loading && !submitLoading && phase === "submitted" && submitted && (
           <div className="flex flex-col items-center gap-6 py-16">
             <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">
@@ -309,7 +402,7 @@ export default function EmployeePortal({ onBack }: Props) {
           </div>
         )}
 
-        {/* ── Phase: Review ── */}
+        {/* Phase: Review */}
         {!loading && !submitLoading && phase === "review" && result?.enriched_request && (
           <EmployeeReviewStep
             enrichedRequest={result.enriched_request}
@@ -320,10 +413,9 @@ export default function EmployeePortal({ onBack }: Props) {
           />
         )}
 
-        {/* ── Phase: Form ── */}
+        {/* Phase: Form */}
         {!loading && !submitLoading && phase === "form" && (
           <>
-            {/* Category disambiguation */}
             {result?.category_suggestion?.needs_disambiguation && (
               <CategoryDisambiguation
                 suggestion={result.category_suggestion}
@@ -332,7 +424,6 @@ export default function EmployeePortal({ onBack }: Props) {
               />
             )}
 
-            {/* Validation errors */}
             {result && !result.is_valid && !result.category_suggestion?.needs_disambiguation && (
               <ValidationBanner result={result} lang={language} />
             )}
@@ -352,6 +443,10 @@ export default function EmployeePortal({ onBack }: Props) {
               voiceInputRef={voiceInputRef}
               showDemoSelector={true}
               submitLabel={i.validateRequest}
+              onActivateVoiceOverlay={handleActivateVoice}
+              onVoiceTranscriptForOverlay={handleVoiceTranscriptForOverlay}
+              onInterimTranscriptChange={setInterimTranscript}
+              overlayActive={overlayActive}
             />
           </>
         )}

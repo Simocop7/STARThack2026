@@ -27,6 +27,14 @@ interface Props {
   showDemoSelector?: boolean;
   /** Label for the submit button */
   submitLabel?: string;
+  /** Activate the immersive voice overlay */
+  onActivateVoiceOverlay?: () => void;
+  /** Called when voice transcript is received while overlay is active */
+  onVoiceTranscriptForOverlay?: () => void;
+  /** Called with interim transcript text */
+  onInterimTranscriptChange?: (text: string) => void;
+  /** Whether the voice overlay is currently active */
+  overlayActive?: boolean;
 }
 
 const DEFAULT_DELIVERY_ADDRESS = "St. Gallen, Olma Halle 9";
@@ -40,6 +48,10 @@ export default function RequestForm({
   voiceInputRef,
   showDemoSelector = true,
   submitLabel,
+  onActivateVoiceOverlay,
+  onVoiceTranscriptForOverlay,
+  onInterimTranscriptChange,
+  overlayActive,
 }: Props) {
   const [form, setForm] = useState<FormData>(
     initialData ?? {
@@ -142,6 +154,11 @@ export default function RequestForm({
     // Activate voice mode on first voice input
     if (!voiceMode) {
       onVoiceModeChange(true);
+    }
+
+    // Notify overlay that transcript was received (triggers TTS confirmation)
+    if (overlayActive) {
+      onVoiceTranscriptForOverlay?.();
     }
 
     try {
@@ -248,28 +265,61 @@ export default function RequestForm({
       )}
 
       {/* Voice input */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
-        <label className="block text-sm font-medium text-blue-800 mb-2">
-          {i.voiceInputLabel}
-        </label>
-        <p className="text-xs text-blue-600 mb-3">{i.voiceInputHint}</p>
+      <div className="bg-gradient-to-r from-indigo-50 via-violet-50 to-purple-50 border border-indigo-200 rounded-xl p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <label className="block text-sm font-semibold text-indigo-900">
+              {i.voiceInputLabel}
+            </label>
+            <p className="text-xs text-indigo-500 mt-0.5">{i.voiceInputHint}</p>
+          </div>
+
+          {/* Immersive voice activation button */}
+          {onActivateVoiceOverlay && (
+            <button
+              type="button"
+              onClick={onActivateVoiceOverlay}
+              disabled={voiceParsing}
+              className="relative flex items-center gap-2 px-5 py-3 rounded-full font-medium text-sm
+                bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 text-white
+                hover:from-indigo-500 hover:via-violet-500 hover:to-purple-500
+                shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300
+                transition-all active:voice-activate-pulse
+                disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                />
+              </svg>
+              Voice Mode
+            </button>
+          )}
+        </div>
+
+        {/* Hidden VoiceInput — imperative ref still works for overlay */}
         <VoiceInput
           ref={effectiveVoiceRef}
           language={form.language}
           onTranscript={handleVoiceTranscript}
           onParsing={setVoiceParsing}
           disabled={voiceParsing}
+          hidden={overlayActive}
+          onInterimChange={onInterimTranscriptChange}
+          autoStopOnSilence={overlayActive}
         />
-        {voiceParsing && (
-          <div className="mt-3 flex items-center gap-2 text-sm text-blue-700">
-            <div className="w-4 h-4 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" />
+        {voiceParsing && !overlayActive && (
+          <div className="mt-3 flex items-center gap-2 text-sm text-indigo-700">
+            <div className="w-4 h-4 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
             {i.voiceParsing}
           </div>
         )}
-        {voiceError && (
+        {voiceError && !overlayActive && (
           <div className="mt-2 text-sm text-red-600">{voiceError}</div>
         )}
-        {missingFields.length > 0 && !voiceMode && (
+        {missingFields.length > 0 && !voiceMode && !overlayActive && (
           <div className="mt-3 bg-amber-50 border border-amber-200 rounded-md p-3">
             <p className="text-sm font-medium text-amber-800">{i.voiceMissingFields}</p>
             <ul className="mt-1 text-xs text-amber-700 list-disc list-inside">

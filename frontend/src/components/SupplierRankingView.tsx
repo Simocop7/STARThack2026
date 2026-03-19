@@ -360,7 +360,7 @@ function SupplierCard({
                 <p className="font-semibold mb-0.5">⚡ Expedited delivery available</p>
                 <p>
                   {fmt(supplier.expedited_unit_price, currency)}/unit →{" "}
-                  <strong>{fmt(supplier.expedited_total_price!, currency)}</strong> total
+                  <strong>{fmt(supplier.expedited_total_price ?? 0, currency)}</strong> total
                   {" "}({supplier.expedited_lead_time_days}d, ≈+8% premium)
                 </p>
               </div>
@@ -987,7 +987,7 @@ function BestInCategoryCard({
                 <div>
                   <p className="text-xs font-semibold text-amber-800">Expedited available</p>
                   <p className="text-xs text-amber-700 mt-0.5">
-                    {fmt(supplier.expedited_unit_price, currency)}/unit · <strong>{fmt(supplier.expedited_total_price!, currency)}</strong> total · {supplier.expedited_lead_time_days}d · ≈+8%
+                    {fmt(supplier.expedited_unit_price, currency)}/unit · <strong>{fmt(supplier.expedited_total_price ?? 0, currency)}</strong> total · {supplier.expedited_lead_time_days}d · ≈+8%
                   </p>
                 </div>
               </div>

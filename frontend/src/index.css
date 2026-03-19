@@ -1,5 +1,95 @@
 @import "tailwindcss";
 
+/* ── Voice Overlay Animations ─────────────────────────────── */
+
+/* Orb: listening state — volume-reactive via --volume custom property */
+.voice-orb-listening {
+  transition: transform 60ms ease-out, box-shadow 60ms ease-out;
+  transform: scale(calc(1 + var(--volume, 0) * 0.4));
+  box-shadow:
+    0 0 calc(30px + var(--volume, 0) * 80px) rgba(99, 102, 241, calc(0.3 + var(--volume, 0) * 0.5)),
+    0 0 calc(60px + var(--volume, 0) * 140px) rgba(139, 92, 246, calc(0.15 + var(--volume, 0) * 0.25)),
+    0 0 calc(100px + var(--volume, 0) * 200px) rgba(168, 85, 247, calc(0.05 + var(--volume, 0) * 0.1));
+  background: radial-gradient(circle at 40% 40%, #a78bfa, #6366f1, #4f46e5);
+}
+
+/* Orb: AI speaking state — gradient hue rotation + gentle pulse */
+@keyframes speakingOrb {
+  0%   { transform: scale(1);    filter: hue-rotate(0deg);   }
+  25%  { transform: scale(1.07); filter: hue-rotate(40deg);  }
+  50%  { transform: scale(1.02); filter: hue-rotate(80deg);  }
+  75%  { transform: scale(1.09); filter: hue-rotate(120deg); }
+  100% { transform: scale(1);    filter: hue-rotate(0deg);   }
+}
+
+.voice-orb-speaking {
+  animation: speakingOrb 3s ease-in-out infinite;
+  background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899, #f97316);
+  background-size: 300% 300%;
+  box-shadow:
+    0 0 60px rgba(139, 92, 246, 0.5),
+    0 0 120px rgba(168, 85, 247, 0.25),
+    0 0 200px rgba(236, 72, 153, 0.1);
+}
+
+/* Orb: processing state — spinning ring */
+@keyframes processingRing {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.voice-orb-processing {
+  box-shadow:
+    0 0 40px rgba(99, 102, 241, 0.3),
+    0 0 80px rgba(139, 92, 246, 0.15);
+  background: radial-gradient(circle at 40% 40%, #a78bfa, #6366f1, #4f46e5);
+}
+
+/* Overlay entrance */
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes orbScaleIn {
+  from { opacity: 0; transform: scale(0.6); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Button activation micro-interaction */
+@keyframes activatePulse {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+
+.voice-activate-pulse {
+  animation: activatePulse 250ms ease-out;
+}
+
+/* Overlay exit */
+@keyframes overlayFadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes orbScaleOut {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.6); }
+}
+
+/* Ambient ring particles for listening */
+@keyframes ringPulse {
+  0%   { transform: scale(1);   opacity: 0.5; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* Transcript fade-in */
+@keyframes transcriptIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 @media print {
   header, .print\:hidden { display: none !important; }
   body { background: white; }
