@@ -19,6 +19,8 @@ from api.data_loader import DataStore
 from api.models import FormInput, ValidationResult
 from api.pipeline import process_request
 from api.voice_parser import parse_voice_transcript
+from api.ranking_models import CleanOrderRecap, RankedSupplierOutput, ScoringWeights
+from api.ranking_orchestrator import get_top_5_suppliers
 
 app = FastAPI(title="Smart Procurement Validator", version="0.1.0")
 
@@ -162,3 +164,29 @@ async def get_request(request_id: str) -> dict:
         if r["request_id"] == request_id:
             return {"request": r}
     raise HTTPException(status_code=404, detail="Request not found")
+
+
+# ── Supplier Ranking ───────────────────────────────────────────────
+
+
+@app.post("/api/rank", response_model=RankedSupplierOutput)
+async def rank_suppliers(
+    order: CleanOrderRecap,
+    force_llm: bool = False,
+) -> RankedSupplierOutput:
+    """Rank suppliers for a clean order recap.
+
+    Returns up to 5 scored suppliers with full audit trail.
+    Set `force_llm=true` to always invoke the LLM fallback.
+    """
+    return await get_top_5_suppliers(order, force_llm=force_llm)
+
+
+@app.post("/api/rank/custom-weights", response_model=RankedSupplierOutput)
+async def rank_suppliers_custom(
+    order: CleanOrderRecap,
+    weights: ScoringWeights,
+    force_llm: bool = False,
+) -> RankedSupplierOutput:
+    """Rank suppliers with custom scoring weights."""
+    return await get_top_5_suppliers(order, weights=weights, force_llm=force_llm)
