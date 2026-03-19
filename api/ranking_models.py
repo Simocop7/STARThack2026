@@ -72,6 +72,14 @@ class ScoreBreakdown(BaseModel):
     lead_time_score: float = Field(..., ge=0, le=1)
 
 
+class RawScores(BaseModel):
+    """Raw dataset values (0-100) for display — not used in composite calculation."""
+
+    quality: int = Field(..., description="Quality score from suppliers.csv (higher = better)")
+    risk: int = Field(..., description="Risk score from suppliers.csv (lower = better)")
+    esg: int = Field(..., description="ESG score from suppliers.csv (higher = better)")
+
+
 # ── Compliance check log (attached per supplier) ──────────────────────
 
 
@@ -110,6 +118,7 @@ class ScoredSupplier(BaseModel):
 
     # Scores
     score_breakdown: ScoreBreakdown
+    raw_scores: RawScores
     composite_score: float
 
     # Compliance

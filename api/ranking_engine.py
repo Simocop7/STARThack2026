@@ -22,11 +22,23 @@ from api.ranking_models import (
     ExcludedSupplier,
     RankedSupplierOutput,
     RankingMethod,
+    RawScores,
     ScoreBreakdown,
     ScoredSupplier,
     ScoringWeights,
 )
 from api.region_mapper import country_to_region
+
+
+def _fmt_tier(min_qty: int, max_qty: int) -> str:
+    """Format a pricing tier range for human-readable display.
+
+    Examples: (1, 99) → '1–99 units', (200000, 999999999) → '200,000+ units'
+    """
+    lo = f"{min_qty:,}"
+    if max_qty >= 999_999_999:
+        return f"{lo}+ units"
+    return f"{lo}–{max_qty:,} units"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -403,28 +415,20 @@ def _score_suppliers(
     min_price, max_price = min(prices), max(prices)
     price_range = max_price - min_price if max_price != min_price else 1.0
 
-    quality_scores = [c["quality_score"] for c in eligible]
-    min_q, max_q = min(quality_scores), max(quality_scores)
-    q_range = max_q - min_q if max_q != min_q else 1.0
-
-    risk_scores = [c["risk_score"] for c in eligible]
-    min_r, max_r = min(risk_scores), max(risk_scores)
-    r_range = max_r - min_r if max_r != min_r else 1.0
-
-    esg_scores = [c["esg_score"] for c in eligible]
-    min_e, max_e = min(esg_scores), max(esg_scores)
-    e_range = max_e - min_e if max_e != min_e else 1.0
-
     scored: list[dict[str, Any]] = []
 
     for c in eligible:
         tier = c["_tier"]
         total = c["_total"]
 
-        price_norm = 1.0 - ((total - min_price) / price_range) if price_range > 0 else 1.0
-        quality_norm = (c["quality_score"] - min_q) / q_range if q_range > 0 else 1.0
-        risk_norm = 1.0 - ((c["risk_score"] - min_r) / r_range) if r_range > 0 else 1.0
-        esg_norm = (c["esg_score"] - min_e) / e_range if e_range > 0 else 1.0
+        # Price: reciprocal proportion — cheapest gets 1.0, others get min_price/their_price.
+        # e.g. cheapest=100€ → 1.0, second=150€ → 0.667 (100/150).
+        price_norm = min_price / total if total > 0 else 1.0
+        # Quality/Risk/ESG: absolute 0-100 scale from dataset so scores are
+        # meaningful regardless of how many suppliers are being compared.
+        quality_norm = c["quality_score"] / 100.0
+        risk_norm = 1.0 - (c["risk_score"] / 100.0)   # lower risk → higher score
+        esg_norm = c["esg_score"] / 100.0
 
         std_lt = tier["standard_lead_time_days"]
         exp_lt = tier["expedited_lead_time_days"]
@@ -514,11 +518,12 @@ def _build_scored_supplier(
             detail="Supplier does not support data residency (should have been filtered).",
         ))
 
+    tier_label = _fmt_tier(tier["min_quantity"], tier["max_quantity"])
     rationale_parts = [
         f"Rank #{rank} with composite score {s['composite']:.3f}.",
         (
-            f"Pricing tier: {tier['min_quantity']}-{tier['max_quantity']} units "
-            f"at {order.currency} {tier['unit_price']:,.2f}/unit "
+            f"Pricing tier: {tier_label} "
+            f"at {order.currency} {tier['unit_price']:,.4g}/unit "
             f"(total {order.currency} {s['total']:,.2f})."
         ),
     ]
@@ -548,7 +553,7 @@ def _build_scored_supplier(
         is_preferred=s["is_preferred"],
         is_incumbent=is_order_preferred,
         meets_lead_time=s["meets_lead_time"],
-        pricing_tier_applied=f"{tier['min_quantity']}-{tier['max_quantity']} units",
+        pricing_tier_applied=tier_label,
         unit_price=tier["unit_price"],
         total_price=s["total"],
         expedited_unit_price=tier["expedited_unit_price"],
@@ -561,6 +566,11 @@ def _build_scored_supplier(
             risk_score=round(s["risk_norm"], 4),
             esg_score=round(s["esg_norm"], 4),
             lead_time_score=round(s["lt_score"], 4),
+        ),
+        raw_scores=RawScores(
+            quality=int(sup["quality_score"]),
+            risk=int(sup["risk_score"]),
+            esg=int(sup["esg_score"]),
         ),
         composite_score=round(s["composite"], 4),
         compliance_checks=supplier_checks,

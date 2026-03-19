@@ -373,6 +373,7 @@ export default function ProcurementPortal({ onBack }: Props) {
                 result={ranking}
                 onNewRequest={handleNewRequest}
                 onSelectSupplier={handleSelectSupplier}
+                orderContext={formData}
               />
             )}
 
