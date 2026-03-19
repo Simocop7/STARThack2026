@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import CategoryDisambiguation from "./CategoryDisambiguation";
 import { ProcurementLoading } from "./ui/procurement-loading";
@@ -25,11 +25,14 @@ type OfficePhase = "inbox" | "process";
 
 interface Props {
   onBack: () => void;
+  /** Controlled from sidebar — when set, portal syncs to this phase */
+  externalPhase?: OfficePhase;
+  onPhaseChange?: (phase: OfficePhase) => void;
 }
 
-export default function ProcurementPortal({ onBack }: Props) {
+export default function ProcurementPortal({ onBack, externalPhase, onPhaseChange }: Props) {
   // ── Office navigation state ─────────────────────────────────────
-  const [officePhase, setOfficePhase] = useState<OfficePhase>("inbox");
+  const [officePhase, setOfficePhase] = useState<OfficePhase>(externalPhase ?? "inbox");
 
   // ── Processing state (mirrors original App.tsx) ─────────────────
   const [result, setResult] = useState<ValidationResult | null>(null);
@@ -53,6 +56,25 @@ export default function ProcurementPortal({ onBack }: Props) {
 
   const voiceInputRef = useRef<VoiceInputHandle | null>(null);
   const i = t(language);
+
+  // ── Sync external phase from sidebar ────────────────────────────
+  useEffect(() => {
+    if (!externalPhase || externalPhase === officePhase) return;
+    if (externalPhase === "inbox") {
+      setOfficePhase("inbox");
+      setResult(null); setRanking(null); setOrderConfirmation(null);
+      setError(null); setSelectedSupplier(null);
+    } else if (externalPhase === "process") {
+      setActiveEmpRequestId(null);
+      setFormData(null); setResult(null); setRanking(null);
+      setOrderConfirmation(null); setError(null);
+      setOfficePhase("process");
+    }
+  // externalPhase is the only trigger we care about
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalPhase]);
+
+  useEffect(() => { onPhaseChange?.(officePhase); }, [officePhase, onPhaseChange]);
 
   // ── Currency helper ──────────────────────────────────────────────
   function currencyForCountry(country: string): string {
@@ -321,24 +343,14 @@ export default function ProcurementPortal({ onBack }: Props) {
   const isApproved = result?.is_valid === true;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-4 print:hidden">
-        <div className="max-w-4xl mx-auto flex items-center gap-3">
-          <button onClick={onBack} className="text-gray-400 hover:text-gray-600 transition-colors mr-1">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">SP</span>
-          </div>
-          <div className="flex-1">
-            <h1 className="text-xl font-semibold text-gray-900">Smart Procurement</h1>
-            <p className="text-sm text-gray-500">Procurement Office</p>
-          </div>
-
-          {/* Breadcrumb nav */}
-          {officePhase === "process" && (
+    <div className="min-h-full bg-gray-50">
+      {/* Slim top bar — shown during processing only */}
+      {officePhase === "process" && (
+        <header className="bg-white border-b border-gray-200 px-6 py-3 print:hidden">
+          <div className="max-w-4xl mx-auto flex items-center gap-3">
+            <div className="flex-1">
+              <h1 className="text-base font-semibold text-gray-900">Procurement Office</h1>
+            </div>
             <div className="flex items-center gap-3">
               {activeEmpRequestId && !orderConfirmation && (
                 <button
@@ -364,9 +376,9 @@ export default function ProcurementPortal({ onBack }: Props) {
                 Back to Inbox
               </button>
             </div>
-          )}
-        </div>
-      </header>
+          </div>
+        </header>
+      )}
 
       <main className="max-w-4xl mx-auto py-8 px-6">
         {/* ── Inbox view ── */}
