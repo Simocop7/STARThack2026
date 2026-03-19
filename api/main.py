@@ -483,6 +483,8 @@ class EmployeeFormInput(BaseModel):
     request_text: str = Field(..., min_length=1, max_length=10000)
     quantity: int | None = Field(None, ge=1, le=1_000_000)
     unit_of_measure: str | None = Field(None, max_length=100)
+    budget_amount: float | None = Field(None, ge=0)
+    currency: str = "EUR"
     category_l1: str | None = Field(None, max_length=100)
     category_l2: str | None = Field(None, max_length=100)
     delivery_country: str | None = Field(None, max_length=3)
@@ -522,6 +524,8 @@ async def submit_employee_request(req: EmployeeFormInput) -> dict:
         "request_text": req.request_text,
         "quantity": req.quantity,
         "unit_of_measure": req.unit_of_measure or "",
+        "budget_amount": req.budget_amount,
+        "currency": req.currency,
         "category_l1": req.category_l1 or "",
         "category_l2": req.category_l2 or "",
         "delivery_country": req.delivery_country or "",
@@ -544,7 +548,7 @@ async def get_employee_requests() -> dict:
     return {"requests": list(reversed(_employee_requests))}
 
 
-_VALID_EMPLOYEE_STATUSES = {"pending", "approved", "rejected", "in_review", "completed"}
+_VALID_EMPLOYEE_STATUSES = {"pending", "approved", "rejected", "in_review", "completed", "refused", "processing"}
 
 
 class StatusUpdate(BaseModel):

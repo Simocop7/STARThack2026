@@ -82,6 +82,9 @@ export default function OrderRecapView({ supplier, ranking, formData, deliveryCo
         <p className="text-xs font-bold text-gray-400 uppercase tracking-wider pt-4 pb-1">What's Being Ordered</p>
         <Row label="Category" value={[formData.category_l1, formData.category_l2].filter(Boolean).join(" › ") || "—"} />
         <Row label="Quantity" value={`${(formData.quantity ?? 1).toLocaleString()} ${formData.unit_of_measure || "units"}`} />
+        {formData.budget_amount != null && (
+          <Row label="Budget" value={fmt(formData.budget_amount, formData.currency || currency)} />
+        )}
         <Row label="Delivery country" value={deliveryCountry} />
         {formData.delivery_country && <Row label="Delivery country" value={formData.delivery_country} />}
         {formData.required_by_date && <Row label="Required by" value={formData.required_by_date} />}
