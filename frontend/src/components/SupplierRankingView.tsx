@@ -459,18 +459,12 @@ function BestInCategoryCard({
 }) {
   const [showScores, setShowScores] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
-  const [confirming, setConfirming] = useState(false);
 
   const isOverall = supplier.rank === 1;
   const wonMeta = PARAMS.filter((p) => wonParams.includes(p.key));
   const accent = wonMeta[0];
   const sb = supplier.score_breakdown;
   const raw = supplier.raw_scores;
-
-  function handleConfirm() {
-    setConfirming(true);
-    onSelect(supplier);
-  }
 
   return (
     <div
@@ -548,17 +542,14 @@ function BestInCategoryCard({
       {/* ── Confirm order button ── */}
       <div className="px-4 py-3">
         <button
-          onClick={handleConfirm}
-          disabled={confirming}
-          className={`w-full rounded-xl py-3 text-sm font-bold tracking-wide transition-all ${
-            confirming
-              ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-              : isOverall
-              ? "bg-blue-600 text-white hover:bg-blue-700 active:scale-[0.98] shadow-sm shadow-blue-200"
-              : "bg-gray-900 text-white hover:bg-gray-800 active:scale-[0.98]"
+          onClick={() => onSelect(supplier)}
+          className={`w-full rounded-xl py-3 text-sm font-bold tracking-wide transition-all active:scale-[0.98] ${
+            isOverall
+              ? "bg-blue-600 text-white hover:bg-blue-700 shadow-sm shadow-blue-200"
+              : "bg-gray-900 text-white hover:bg-gray-800"
           }`}
         >
-          {confirming ? "Placing order…" : isOverall ? "✓ Confirm & Place Order" : "Place Order"}
+          ✓ Confirm &amp; Place Order
         </button>
       </div>
 
