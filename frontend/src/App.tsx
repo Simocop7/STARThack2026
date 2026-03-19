@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import CategoryDisambiguation from "./components/CategoryDisambiguation";
 import RequestForm from "./components/RequestForm";
 import ValidationBanner from "./components/ValidationBanner";
 import SupplierRankingView from "./components/SupplierRankingView";
+import VoiceConversation from "./components/VoiceConversation";
 import { t } from "./i18n";
 import type { FormData, ValidationResult, RankedSupplierOutput } from "./types";
+import type { VoiceInputHandle } from "./components/VoiceInput";
+
+type ConversationPhase = "idle" | "speaking" | "listening" | "processing";
 
 export default function App() {
   const [result, setResult] = useState<ValidationResult | null>(null);
@@ -15,6 +19,13 @@ export default function App() {
   const [formData, setFormData] = useState<FormData | null>(null);
   const [language, setLanguage] = useState("en");
 
+  // Voice conversation state
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [ttsText, setTtsText] = useState<string | null>(null);
+  const [conversationPhase, setConversationPhase] = useState<ConversationPhase>("idle");
+
+  const voiceInputRef = useRef<VoiceInputHandle | null>(null);
+
   const i = t(language);
 
   async function handleSubmit(data: FormData) {
@@ -24,6 +35,11 @@ export default function App() {
     setResult(null);
     setRanking(null);
     setError(null);
+    setTtsText(null);
+
+    if (voiceMode) {
+      setConversationPhase("processing");
+    }
 
     try {
       const body: Record<string, unknown> = {
@@ -47,6 +63,7 @@ export default function App() {
       if (!res.ok) {
         const detail = await res.text();
         setError(`Validation failed (${res.status}): ${detail}`);
+        if (voiceMode) setConversationPhase("idle");
         return;
       }
 
@@ -73,8 +90,16 @@ export default function App() {
       if (json.is_valid && json.enriched_request) {
         await fetchRanking(json.enriched_request);
       }
+
+      // Voice mode: trigger TTS with the validation summary
+      if (voiceMode && json.user_message?.summary) {
+        setTtsText(json.user_message.summary);
+      } else if (voiceMode) {
+        setConversationPhase("idle");
+      }
     } catch {
       setError(i.networkError);
+      if (voiceMode) setConversationPhase("idle");
     } finally {
       setLoading(false);
     }
@@ -128,12 +153,40 @@ export default function App() {
     setRanking(null);
     setError(null);
     setFormData(null);
+    setVoiceMode(false);
+    setTtsText(null);
+    setConversationPhase("idle");
   }
 
   function handleCategoryConfirm(categoryL1: string, categoryL2: string) {
     if (!formData) return;
     handleSubmit({ ...formData, category_l1: categoryL1, category_l2: categoryL2 });
   }
+
+  // Called when TTS playback ends — activate mic for user response
+  const handlePlaybackEnd = useCallback(() => {
+    if (!voiceMode) return;
+
+    // If valid, conversation is done
+    if (result?.is_valid) {
+      setConversationPhase("idle");
+      return;
+    }
+
+    // If invalid, activate mic to listen for user's correction
+    setConversationPhase("listening");
+    // Small delay to avoid audio feedback
+    setTimeout(() => {
+      voiceInputRef.current?.startListening();
+    }, 300);
+  }, [voiceMode, result]);
+
+  const handleVoiceStop = useCallback(() => {
+    setVoiceMode(false);
+    setTtsText(null);
+    setConversationPhase("idle");
+    voiceInputRef.current?.stopListening();
+  }, []);
 
   const isApproved = result?.is_valid === true;
 
@@ -152,6 +205,16 @@ export default function App() {
       </header>
 
       <main className="max-w-4xl mx-auto py-8 px-6">
+        {/* Voice conversation status bar */}
+        <VoiceConversation
+          textToSpeak={ttsText}
+          language={language}
+          active={voiceMode}
+          onPlaybackEnd={handlePlaybackEnd}
+          onStop={handleVoiceStop}
+          externalPhase={conversationPhase}
+        />
+
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
             <p className="text-sm text-red-800">{error}</p>
@@ -202,7 +265,15 @@ export default function App() {
             {result && !result.category_suggestion?.needs_disambiguation && (
               <ValidationBanner result={result} lang={language} />
             )}
-            <RequestForm onSubmit={handleSubmit} initialData={formData} onLanguageChange={setLanguage} />
+
+            <RequestForm
+              onSubmit={handleSubmit}
+              initialData={formData}
+              onLanguageChange={setLanguage}
+              voiceMode={voiceMode}
+              onVoiceModeChange={setVoiceMode}
+              voiceInputRef={voiceInputRef}
+            />
           </>
         )}
       </main>

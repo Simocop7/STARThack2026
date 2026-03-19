@@ -11,11 +11,12 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from pydantic import BaseModel, Field
 
 from api.data_loader import DataStore
+from api.elevenlabs_client import get_elevenlabs_client
 from api.models import FormInput, ValidationResult
 from api.pipeline import process_request
 from api.voice_parser import parse_voice_transcript
@@ -35,7 +36,7 @@ _request_log: dict[str, list[float]] = {}
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    if request.url.path == "/api/validate":
+    if request.url.path in ("/api/validate", "/api/tts"):
         client_ip = request.client.host if request.client else "unknown"
         now = time.time()
         window_start = now - _RATE_LIMIT_WINDOW_SECONDS
@@ -136,6 +137,32 @@ async def parse_voice(voice: VoiceInput) -> dict:
     today = date_mod.today().isoformat()
     result = await parse_voice_transcript(voice.transcript, voice.language, today)
     return result
+
+
+class TTSInput(BaseModel):
+    text: str = Field(..., min_length=1, max_length=5000)
+    language: str = "en"
+
+
+@app.post("/api/tts")
+async def text_to_speech(tts_input: TTSInput):
+    """Convert text to speech using ElevenLabs. Returns audio/mpeg stream."""
+    client = get_elevenlabs_client()
+    if client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="TTS service not configured. Set ELEVENLABS_API_KEY.",
+        )
+
+    async def audio_stream():
+        async for chunk in client.text_to_speech(tts_input.text):
+            yield chunk
+
+    return StreamingResponse(
+        audio_stream(),
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @app.get("/api/requests")

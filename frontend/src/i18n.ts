@@ -57,6 +57,13 @@ interface Translations {
   voiceParseError: string;
   voiceMissingFields: string;
 
+  // Voice conversation
+  voiceConversationActive: string;
+  voiceSpeaking: string;
+  voiceListening: string;
+  voiceProcessing: string;
+  voiceStop: string;
+
   // Loading / error
   analyzing: string;
   tryAgain: string;
@@ -110,6 +117,11 @@ const translations: Record<LangCode, Translations> = {
     voiceParsing: "Parsing your voice input...",
     voiceParseError: "Could not parse voice input. Please try again or type manually.",
     voiceMissingFields: "Please fill in these fields manually:",
+    voiceConversationActive: "Voice conversation active",
+    voiceSpeaking: "Responding...",
+    voiceListening: "Listening for your response...",
+    voiceProcessing: "Processing...",
+    voiceStop: "Stop conversation",
     analyzing: "Analyzing your request...",
     tryAgain: "Try again",
     networkError: "Network error — could not reach the server.",
@@ -160,6 +172,11 @@ const translations: Record<LangCode, Translations> = {
     voiceParsing: "Analyse de votre saisie vocale...",
     voiceParseError: "Impossible d'analyser la saisie vocale. Réessayez ou saisissez manuellement.",
     voiceMissingFields: "Veuillez remplir ces champs manuellement :",
+    voiceConversationActive: "Conversation vocale active",
+    voiceSpeaking: "R\u00e9ponse en cours...",
+    voiceListening: "\u00c9coute de votre r\u00e9ponse...",
+    voiceProcessing: "Traitement en cours...",
+    voiceStop: "Arr\u00eater la conversation",
     analyzing: "Analyse de votre demande en cours...",
     tryAgain: "Réessayer",
     networkError: "Erreur réseau — impossible de contacter le serveur.",
@@ -209,7 +226,12 @@ const translations: Record<LangCode, Translations> = {
     voiceInputHint: "Sprechen Sie Ihre Beschaffungsanfrage — das Formular wird automatisch ausgefüllt.",
     voiceParsing: "Ihre Spracheingabe wird verarbeitet...",
     voiceParseError: "Spracheingabe konnte nicht verarbeitet werden. Bitte erneut versuchen.",
-    voiceMissingFields: "Bitte füllen Sie diese Felder manuell aus:",
+    voiceMissingFields: "Bitte f\u00fcllen Sie diese Felder manuell aus:",
+    voiceConversationActive: "Sprachgespr\u00e4ch aktiv",
+    voiceSpeaking: "Antwort wird gesprochen...",
+    voiceListening: "H\u00f6re auf Ihre Antwort...",
+    voiceProcessing: "Verarbeitung...",
+    voiceStop: "Gespr\u00e4ch beenden",
     analyzing: "Ihre Anfrage wird analysiert...",
     tryAgain: "Erneut versuchen",
     networkError: "Netzwerkfehler — Server nicht erreichbar.",
@@ -260,6 +282,11 @@ const translations: Record<LangCode, Translations> = {
     voiceParsing: "Procesando su entrada de voz...",
     voiceParseError: "No se pudo procesar la entrada de voz. Intente de nuevo o escriba manualmente.",
     voiceMissingFields: "Por favor complete estos campos manualmente:",
+    voiceConversationActive: "Conversaci\u00f3n por voz activa",
+    voiceSpeaking: "Respondiendo...",
+    voiceListening: "Escuchando su respuesta...",
+    voiceProcessing: "Procesando...",
+    voiceStop: "Detener conversaci\u00f3n",
     analyzing: "Analizando su solicitud...",
     tryAgain: "Intentar de nuevo",
     networkError: "Error de red — no se pudo contactar el servidor.",
@@ -310,7 +337,12 @@ const translations: Record<LangCode, Translations> = {
     voiceParsing: "Processando sua entrada de voz...",
     voiceParseError: "Não foi possível processar a entrada de voz. Tente novamente ou digite manualmente.",
     voiceMissingFields: "Por favor preencha estes campos manualmente:",
-    analyzing: "Analisando sua solicitação...",
+    voiceConversationActive: "Conversa por voz ativa",
+    voiceSpeaking: "Respondendo...",
+    voiceListening: "Ouvindo sua resposta...",
+    voiceProcessing: "Processando...",
+    voiceStop: "Parar conversa",
+    analyzing: "Analisando sua solicita\u00e7\u00e3o...",
     tryAgain: "Tentar novamente",
     networkError: "Erro de rede — não foi possível contactar o servidor.",
     loadError: "Não foi possível carregar as opções. Atualize a página.",
@@ -360,6 +392,11 @@ const translations: Record<LangCode, Translations> = {
     voiceParsing: "Elaborazione dell'input vocale...",
     voiceParseError: "Impossibile elaborare l'input vocale. Riprova o digita manualmente.",
     voiceMissingFields: "Compila questi campi manualmente:",
+    voiceConversationActive: "Conversazione vocale attiva",
+    voiceSpeaking: "Sto rispondendo...",
+    voiceListening: "In ascolto della tua risposta...",
+    voiceProcessing: "Elaborazione in corso...",
+    voiceStop: "Ferma conversazione",
     analyzing: "Analisi della richiesta in corso...",
     tryAgain: "Riprova",
     networkError: "Errore di rete — impossibile raggiungere il server.",
@@ -410,6 +447,11 @@ const translations: Record<LangCode, Translations> = {
     voiceParsing: "音声入力を処理中...",
     voiceParseError: "音声入力を処理できませんでした。もう一度お試しください。",
     voiceMissingFields: "以下のフィールドを手動で入力してください：",
+    voiceConversationActive: "音声会話中",
+    voiceSpeaking: "応答中...",
+    voiceListening: "お返事をお待ちしています...",
+    voiceProcessing: "処理中...",
+    voiceStop: "会話を終了",
     analyzing: "リクエストを分析中...",
     tryAgain: "再試行",
     networkError: "ネットワークエラー — サーバーに接続できません。",

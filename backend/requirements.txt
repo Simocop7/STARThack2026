@@ -7,3 +7,4 @@ python-dotenv
 python-multipart
 langchain-core>=0.3
 langchain-openai>=0.3
+httpx>=0.27

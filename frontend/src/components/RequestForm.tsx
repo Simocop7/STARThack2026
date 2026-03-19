@@ -1,27 +1,40 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import type { FormData } from "../types";
-import VoiceInput from "./VoiceInput";
+import VoiceInput, { type VoiceInputHandle } from "./VoiceInput";
 
 const LANGUAGES = [
   { code: "en", label: "English" },
-  { code: "fr", label: "Français" },
+  { code: "fr", label: "Fran\u00e7ais" },
   { code: "de", label: "Deutsch" },
-  { code: "es", label: "Español" },
-  { code: "pt", label: "Português" },
+  { code: "es", label: "Espa\u00f1ol" },
+  { code: "pt", label: "Portugu\u00eas" },
   { code: "it", label: "Italiano" },
-  { code: "ja", label: "日本語" },
+  { code: "ja", label: "\u65e5\u672c\u8a9e" },
 ];
 
 interface Props {
   onSubmit: (data: FormData) => void;
   initialData: FormData | null;
   onLanguageChange: (lang: string) => void;
+  /** Whether voice conversation mode is active */
+  voiceMode: boolean;
+  /** Notify parent that user started voice input */
+  onVoiceModeChange: (active: boolean) => void;
+  /** Ref to access VoiceInput's startListening */
+  voiceInputRef?: React.RefObject<VoiceInputHandle | null>;
 }
 
 const DEFAULT_DELIVERY_ADDRESS = "St. Gallen, Olma Halle 9";
 
-export default function RequestForm({ onSubmit, initialData, onLanguageChange }: Props) {
+export default function RequestForm({
+  onSubmit,
+  initialData,
+  onLanguageChange,
+  voiceMode,
+  onVoiceModeChange,
+  voiceInputRef,
+}: Props) {
   const [form, setForm] = useState<FormData>(
     initialData ?? {
       request_text: "",
@@ -47,6 +60,15 @@ export default function RequestForm({ onSubmit, initialData, onLanguageChange }:
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
 
+  const internalVoiceRef = useRef<VoiceInputHandle | null>(null);
+  const effectiveVoiceRef = voiceInputRef ?? internalVoiceRef;
+
+  // Track latest form for auto-submit (avoid stale closures)
+  const formRef = useRef(form);
+  formRef.current = form;
+
+  const pendingAutoSubmit = useRef(false);
+
   useEffect(() => {
     fetch("/api/requests")
       .then((r) => r.json())
@@ -55,6 +77,21 @@ export default function RequestForm({ onSubmit, initialData, onLanguageChange }:
         setLoadError(i.loadError);
       });
   }, []);
+
+  // Sync initialData changes (e.g. corrected form from validation)
+  useEffect(() => {
+    if (initialData) {
+      setForm(initialData);
+    }
+  }, [initialData]);
+
+  // Auto-submit after voice parse fills form
+  useEffect(() => {
+    if (pendingAutoSubmit.current) {
+      pendingAutoSubmit.current = false;
+      onSubmit(formRef.current);
+    }
+  });
 
   function update(field: keyof FormData, value: string | number | null) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -91,6 +128,11 @@ export default function RequestForm({ onSubmit, initialData, onLanguageChange }:
     setVoiceError(null);
     setMissingFields([]);
 
+    // Activate voice mode on first voice input
+    if (!voiceMode) {
+      onVoiceModeChange(true);
+    }
+
     try {
       const res = await fetch("/api/parse-voice", {
         method: "POST",
@@ -105,18 +147,27 @@ export default function RequestForm({ onSubmit, initialData, onLanguageChange }:
 
       const parsed = await res.json();
 
-      setForm((prev) => ({
-        ...prev,
-        request_text: parsed.request_text || transcript,
-        quantity: parsed.quantity ?? prev.quantity,
-        unit_of_measure: parsed.unit_of_measure || prev.unit_of_measure,
-        required_by_date: parsed.required_by_date || prev.required_by_date,
-        preferred_supplier: parsed.preferred_supplier || prev.preferred_supplier,
-        delivery_address: prev.delivery_address || DEFAULT_DELIVERY_ADDRESS,
-      }));
+      setForm((prev) => {
+        const updated = {
+          ...prev,
+          request_text: parsed.request_text || prev.request_text || transcript,
+          quantity: parsed.quantity ?? prev.quantity,
+          unit_of_measure: parsed.unit_of_measure || prev.unit_of_measure,
+          required_by_date: parsed.required_by_date || prev.required_by_date,
+          preferred_supplier: parsed.preferred_supplier || prev.preferred_supplier,
+          delivery_address: prev.delivery_address || DEFAULT_DELIVERY_ADDRESS,
+        };
+        formRef.current = updated;
+        return updated;
+      });
 
       if (parsed.missing_fields?.length) {
         setMissingFields(parsed.missing_fields);
+      }
+
+      // In voice mode, auto-submit after parse
+      if (voiceMode || true) {
+        pendingAutoSubmit.current = true;
       }
     } catch {
       setVoiceError(i.voiceParseError);
@@ -192,6 +243,7 @@ export default function RequestForm({ onSubmit, initialData, onLanguageChange }:
         </label>
         <p className="text-xs text-blue-600 mb-3">{i.voiceInputHint}</p>
         <VoiceInput
+          ref={effectiveVoiceRef}
           language={form.language}
           onTranscript={handleVoiceTranscript}
           onParsing={setVoiceParsing}
@@ -206,7 +258,7 @@ export default function RequestForm({ onSubmit, initialData, onLanguageChange }:
         {voiceError && (
           <div className="mt-2 text-sm text-red-600">{voiceError}</div>
         )}
-        {missingFields.length > 0 && (
+        {missingFields.length > 0 && !voiceMode && (
           <div className="mt-3 bg-amber-50 border border-amber-200 rounded-md p-3">
             <p className="text-sm font-medium text-amber-800">{i.voiceMissingFields}</p>
             <ul className="mt-1 text-xs text-amber-700 list-disc list-inside">
