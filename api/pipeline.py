@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-<<<<<<< Updated upstream
 import asyncio
-=======
->>>>>>> Stashed changes
 import logging
 import types
 from typing import Any, Union, get_args, get_origin
@@ -29,6 +26,8 @@ def _log(symbol: str, colour: str, label: str, detail: str = "") -> None:
     if detail:
         msg += f"  {_DIM}{detail}{_R}"
     print(msg, flush=True)
+
+
 from api.interpreter import interpret_request
 from api.message_generator import generate_user_message
 from api.models import (
@@ -49,8 +48,6 @@ from api.validators.lead_time import check_lead_time
 from api.validators.policy_rules import check_policy_rules
 from api.validators.supplier_checker import check_supplier
 
-logger = logging.getLogger(__name__)
-
 _LLM_TIMEOUT_SECONDS = 25.0
 
 
@@ -58,11 +55,7 @@ def _apply_fixes(
     enriched: EnrichedRequest,
     issues: list[ValidationIssue],
 ) -> dict[str, Any]:
-    """Build a corrected copy of the enriched request with all fixes applied.
-
-    Coerces suggested string values to the target field's type using
-    the EnrichedRequest model schema.
-    """
+    """Build a corrected copy of the enriched request with all fixes applied."""
     data = enriched.model_dump(mode="json")
     field_types = {name: info.annotation for name, info in EnrichedRequest.model_fields.items()}
 
@@ -72,9 +65,7 @@ def _apply_fixes(
             value: Any = issue.fix_action.suggested_value
             if field not in data:
                 continue
-            # Coerce string value to the field's expected type
             target_type = field_types.get(field)
-            # Unwrap Optional[X] / X | None to its inner type
             origin = get_origin(target_type)
             if origin is Union or isinstance(target_type, types.UnionType):
                 inner = [t for t in get_args(target_type) if t is not type(None)]
@@ -145,8 +136,12 @@ async def process_request(form_input: FormInput) -> ValidationResult:
     """Run the full 3-stage pipeline."""
     store = DataStore.get()
 
-<<<<<<< Updated upstream
+    desc_preview = (form_input.request_text or "")[:80].replace("\n", " ")
+    print(flush=True)
+    _log("▶", _CYAN, "PIPELINE START", f'"{desc_preview}{"…" if len(form_input.request_text or "") > 80 else ""}"')
+
     # ── Stage 1: LLM interpretation (with graceful degradation) ──
+    _log("1/3", _CYAN, "LLM Interpretation", "sending request to Azure OpenAI …")
     try:
         enriched = await asyncio.wait_for(
             interpret_request(
@@ -156,26 +151,14 @@ async def process_request(form_input: FormInput) -> ValidationResult:
             ),
             timeout=_LLM_TIMEOUT_SECONDS,
         )
+        _log("  ✓", _GREEN, "Interpreted",
+             f"category={enriched.category_l1}/{enriched.category_l2}  "
+             f"qty={enriched.quantity}  country={enriched.delivery_country}  "
+             f"urgency={enriched.urgency}")
     except Exception:
         logger.exception("LLM interpretation failed — falling back to raw form data")
+        _log("  !", _YELLOW, "LLM failed", "using raw form data as fallback")
         enriched = _fallback_enriched(form_input)
-=======
-    desc_preview = (form_input.request_text or "")[:80].replace("\n", " ")
-    print(flush=True)
-    _log("▶", _CYAN, "PIPELINE START", f'"{desc_preview}{"…" if len(form_input.request_text or "") > 80 else ""}"')
-
-    # ── Stage 1: LLM interpretation ──
-    _log("1/3", _CYAN, "LLM Interpretation", "sending request to Azure OpenAI …")
-    enriched = await interpret_request(
-        form_input,
-        categories=store.categories,
-        suppliers=store.suppliers,
-    )
-    _log("  ✓", _GREEN, "Interpreted",
-         f"category={enriched.category_l1}/{enriched.category_l2}  "
-         f"qty={enriched.quantity}  country={enriched.delivery_country}  "
-         f"urgency={enriched.urgency}")
->>>>>>> Stashed changes
 
     # If the form had a preferred_supplier text but the LLM couldn't resolve it,
     # try our own fuzzy lookup
@@ -226,7 +209,7 @@ async def process_request(form_input: FormInput) -> ValidationResult:
         issues_pre = []
 
     # ── Stage 2: Deterministic validation ──
-    _log("2/3", _CYAN, "Validation", "running 5 deterministic validators …")
+    _log("2/3", _CYAN, "Validation", "running validators …")
     issues: list[ValidationIssue] = issues_pre
 
     completeness_issues = check_completeness(enriched)
@@ -234,23 +217,13 @@ async def process_request(form_input: FormInput) -> ValidationResult:
     _log("  ·", _DIM, "completeness",
          f"{len(completeness_issues)} issue(s)" if completeness_issues else "OK")
 
-<<<<<<< Updated upstream
     issues.extend(check_category(enriched, store.category_index))
 
-    issues.extend(
-        check_supplier(
-            enriched,
-            suppliers_by_category=store.suppliers_by_category,
-            supplier_by_key=store.supplier_by_key,
-            policies=store.policies,
-        )
-=======
     supplier_issues = check_supplier(
         enriched,
         suppliers_by_category=store.suppliers_by_category,
         supplier_by_key=store.supplier_by_key,
         policies=store.policies,
->>>>>>> Stashed changes
     )
     issues.extend(supplier_issues)
     _log("  ·", _DIM, "supplier eligibility",
@@ -290,7 +263,12 @@ async def process_request(form_input: FormInput) -> ValidationResult:
 
     # ── Stage 3: LLM message generation (with graceful degradation) ──
     blocking_issues = [i for i in issues if i.severity in (Severity.CRITICAL, Severity.HIGH)]
-<<<<<<< Updated upstream
+    if blocking_issues:
+        _log("3/3", _CYAN, "Message generation",
+             f"generating user-facing explanation for {len(blocking_issues)} blocking issue(s) …")
+    else:
+        _log("3/3", _CYAN, "Message generation", "no blocking issues — generating summary …")
+
     try:
         user_message = await asyncio.wait_for(
             generate_user_message(
@@ -301,28 +279,15 @@ async def process_request(form_input: FormInput) -> ValidationResult:
             ),
             timeout=_LLM_TIMEOUT_SECONDS,
         )
+        _log("  ✓", _GREEN, "Message ready", f"language={form_input.language}")
     except Exception:
         logger.exception("LLM message generation failed — using fallback message")
+        _log("  !", _YELLOW, "LLM failed", "using fallback message")
         user_message = _fallback_user_message(issues, form_input.language)
-=======
-    if blocking_issues:
-        _log("3/3", _CYAN, "Message generation",
-             f"generating user-facing explanation for {len(blocking_issues)} blocking issue(s) …")
-    else:
-        _log("3/3", _CYAN, "Message generation", "no blocking issues — generating summary …")
-
-    user_message = await generate_user_message(
-        enriched,
-        blocking_issues,
-        corrected,
-        language=form_input.language,
-    )
-    _log("  ✓", _GREEN, "Message ready", f"language={form_input.language}")
 
     result_label = _GREEN + "✔ CAN PROCEED" if is_valid else _RED + "✘ BLOCKED"
     _log("◀", _CYAN, "PIPELINE DONE", f"{result_label}{_R}")
     print(flush=True)
->>>>>>> Stashed changes
 
     return ValidationResult(
         is_valid=is_valid,

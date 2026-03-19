@@ -54,7 +54,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Smart Procurement Validator", version="0.1.0", lifespan=lifespan)
 
 
-<<<<<<< Updated upstream
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Catch-all handler so judges never see a raw Python traceback."""
@@ -64,7 +63,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "An unexpected error occurred. Please try again."},
     )
 
-=======
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     body = None
@@ -79,26 +78,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         errors,
         body,
     )
-    # Coerce common field issues and retry
-    if body and isinstance(body, dict):
-        fixed = dict(body)
-        # Empty string dates → null
-        for date_field in ("required_by_date",):
-            if fixed.get(date_field) == "":
-                fixed[date_field] = None
-        # Empty string numbers → null
-        for num_field in ("quantity",):
-            if fixed.get(num_field) == "":
-                fixed[num_field] = None
-        try:
-            from api.models import FormInput
-            form = FormInput(**fixed)
-            from api.pipeline import process_request
-            result = await process_request(form)
-            return JSONResponse(content=result.model_dump(mode="json"))
-        except Exception as retry_exc:
-            logger.error("Auto-fix retry also failed: %s", retry_exc)
-
     friendly = [
         {"field": ".".join(str(l) for l in e.get("loc", [])), "message": e.get("msg", "")}
         for e in errors
@@ -107,9 +86,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         status_code=422,
         content={"detail": "Invalid request data", "errors": friendly},
     )
-
-
->>>>>>> Stashed changes
 # ---------------------------------------------------------------------------
 # Simple in-memory rate limiter (no extra dependency)
 # ---------------------------------------------------------------------------

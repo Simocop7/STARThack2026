@@ -1,11 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-<<<<<<< Updated upstream
-import { VitePWA } from "vite-plugin-pwa";
 import { fileURLToPath, URL } from "node:url";
-=======
->>>>>>> Stashed changes
 
 export default defineConfig({
   plugins: [
