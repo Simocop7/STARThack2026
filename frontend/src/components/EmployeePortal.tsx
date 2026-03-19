@@ -109,16 +109,6 @@ export default function EmployeePortal({ onBack }: Props) {
     if (emptyEndCountRef.current > 5) {
       // Too many consecutive empty ends — mic probably isn't working
       console.warn("[Voice] Too many empty recognition sessions — stopping");
-      setError("Microphone not working. Please allow microphone permission and try again.");
-      setOverlayPhase("closing");
-      voiceInputRef.current?.stopListening();
-      setTimeout(() => {
-        setOverlayActive(false);
-        setVoiceMode(false);
-        setTtsText(null);
-        setConversationPhase("idle");
-        setInterimTranscript("");
-      }, 400);
       return;
     }
 
@@ -145,9 +135,11 @@ export default function EmployeePortal({ onBack }: Props) {
     voiceRoundRef.current = 0;
     emptyEndCountRef.current = 0;
 
-    // Start immediately so SpeechRecognition remains within user gesture window.
-    voiceInputRef.current?.startListening();
-    startWatchdog();
+    // Start listening after a brief delay for overlay to mount
+    setTimeout(() => {
+      voiceInputRef.current?.startListening();
+      startWatchdog();
+    }, 300);
   }, [startWatchdog]);
 
   // ── Close overlay ───────────────────────────────────────────
@@ -231,8 +223,11 @@ export default function EmployeePortal({ onBack }: Props) {
         // is seen as a change by React and re-triggers VoiceConversation's TTS effect
         setConversationPhase("idle");
         emptyEndCountRef.current = 0;
-        voiceInputRef.current?.startListening();
-        startWatchdog();
+        // Longer delay gives browser time to release audio resources after TTS
+        setTimeout(() => {
+          voiceInputRef.current?.startListening();
+          startWatchdog();
+        }, 800);
       } else {
         // All fields filled — close overlay
         setOverlayPhase("closing");
@@ -252,7 +247,9 @@ export default function EmployeePortal({ onBack }: Props) {
       return;
     }
     setConversationPhase("listening");
-    voiceInputRef.current?.startListening();
+    setTimeout(() => {
+      voiceInputRef.current?.startListening();
+    }, 300);
   }, [voiceMode, overlayActive, result?.is_valid, startWatchdog]);
 
   const handleVoiceStop = useCallback(() => {
@@ -386,8 +383,6 @@ export default function EmployeePortal({ onBack }: Props) {
           request_text: formData.request_text,
           quantity: enriched.quantity ?? formData.quantity ?? null,
           unit_of_measure: enriched.unit_of_measure || formData.unit_of_measure || null,
-          budget_amount: enriched.budget_amount ?? formData.budget_amount ?? null,
-          currency: enriched.currency || formData.currency || "EUR",
           category_l1: enriched.category_l1 || null,
           category_l2: enriched.category_l2 || null,
           delivery_country: enriched.delivery_country || formData.delivery_country || null,
@@ -471,9 +466,8 @@ export default function EmployeePortal({ onBack }: Props) {
         interimTranscript={interimTranscript}
         onClose={handleOverlayClose}
         onStopListening={() => {
-          // Capture transcript before stopListening, which may clear interim text.
-          const transcript = interimTranscript.trim();
           voiceInputRef.current?.stopListening();
+          const transcript = interimTranscript.trim();
           if (transcript) {
             setOverlayPhase("processing");
             // Send transcript to parse — missing fields callback will handle the flow

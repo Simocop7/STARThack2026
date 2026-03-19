@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import type { FormData } from "../types";
 import VoiceInput, { type VoiceInputHandle } from "./VoiceInput";
-import { AIVoiceInput } from "./ui/ai-voice-input";
 
 
 const LANGUAGES = [
@@ -357,13 +356,15 @@ export default function RequestForm({
       parsed = localParseVoiceTranscript(transcript, form.language);
     }
 
-    // Merge parsed fields into form.
-    // request_text must stay exactly as dictated (word-by-word transcript).
-    // category_l1/l2: never filled by parse-voice (the /api/validate LLM does that),
-    // so leave them empty when transcript changes to force re-inference.
+    // Merge parsed fields into form, preserving existing non-empty values.
+    // request_text: prefer the LLM-cleaned version from parse-voice (stripped of
+    // conversational filler), falling back to the raw transcript.
+    // category_l1/l2: never filled by parse-voice (the /api/validate LLM does
+    // that), so always leave them empty here — the backend will auto-detect them
+    // from request_text. Do NOT preserve a stale previous category if request_text changed.
     let updatedForm: FormData = formRef.current;
     setForm((prev) => {
-      const newRequestText = transcript;
+      const newRequestText = parsed.request_text || transcript;
       const requestTextChanged = newRequestText !== prev.request_text;
       const updated = {
         ...prev,
@@ -384,33 +385,16 @@ export default function RequestForm({
       return updated;
     });
 
-    // Check required fields still missing:
-    // - Keep technical keys for follow-up generation
-    // - Show friendly labels in UI
-    const stillMissingTechnical: string[] = [];
-    const stillMissingFriendly: string[] = [];
+    // Check which required fields are still missing
+    const stillMissing: string[] = [];
+    if (!updatedForm.quantity) stillMissing.push("quantity");
+    if (!updatedForm.required_by_date) stillMissing.push("delivery date");
+    if (!updatedForm.delivery_country) stillMissing.push("delivery_country");
 
-    if (!updatedForm.request_text.trim()) {
-      stillMissingTechnical.push("request_text");
-      stillMissingFriendly.push(i.requestDescription);
-    }
-    if (!updatedForm.quantity) {
-      stillMissingTechnical.push("quantity");
-      stillMissingFriendly.push(i.quantity);
-    }
-    if (!updatedForm.required_by_date) {
-      stillMissingTechnical.push("delivery date");
-      stillMissingFriendly.push(i.requiredByDate);
-    }
-    if (!updatedForm.delivery_country) {
-      stillMissingTechnical.push("delivery_country");
-      stillMissingFriendly.push(i.deliveryCountry);
-    }
-
-    setMissingFields(stillMissingFriendly);
+    setMissingFields(stillMissing);
 
     if (overlayActive) {
-      onMissingFieldsDetected?.(stillMissingTechnical);
+      onMissingFieldsDetected?.(stillMissing);
     } else if (voiceMode) {
       pendingAutoSubmit.current = true;
     }
@@ -423,9 +407,7 @@ export default function RequestForm({
 
   // Register force-transcript callback for parent to bypass VoiceInput
   useEffect(() => {
-    onRegisterForceTranscript?.((transcript: string) => {
-      handleVoiceTranscriptRef.current(transcript);
-    });
+    onRegisterForceTranscript?.((transcript: string) => handleVoiceTranscriptRef.current(transcript));
   }, [onRegisterForceTranscript]);
 
   const [fieldErrors, setFieldErrors] = useState<Set<string>>(new Set());
@@ -728,14 +710,25 @@ export default function RequestForm({
               <p className="text-xs text-gray-500 mt-0.5">{i.voiceInputHint}</p>
             </div>
 
+            {/* AI voice activation button */}
             {onActivateVoiceOverlay && (
               <div className={voiceParsing ? "pointer-events-none opacity-70" : undefined}>
-                <AIVoiceInput
-                  onStart={onActivateVoiceOverlay}
-                  onStop={() => onDeactivateVoiceOverlay?.()}
-                  active={overlayActive}
-                  className="py-1"
-                />
+                <button
+                  type="button"
+                  onClick={onActivateVoiceOverlay}
+                  disabled={voiceParsing}
+                  className="relative flex items-center gap-2 px-5 py-3 rounded-full font-medium text-sm
+                    bg-gradient-to-r from-red-600 via-red-700 to-red-800 text-white
+                    hover:from-red-500 hover:via-red-600 hover:to-red-700
+                    shadow-lg shadow-red-200 hover:shadow-xl hover:shadow-red-300
+                    transition-all
+                    disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  </svg>
+                  Voice Mode
+                </button>
               </div>
             )}
 
@@ -764,7 +757,7 @@ export default function RequestForm({
               <div className="mt-2 text-sm text-red-600">{voiceError}</div>
             )}
 
-            {missingFields.length > 0 && !overlayActive && (
+            {missingFields.length > 0 && !voiceMode && !overlayActive && (
               <div className="mt-3 bg-red-50 border border-red-200 rounded-md p-3">
                 <p className="text-sm font-medium text-red-800">{i.voiceMissingFields}</p>
                 <ul className="mt-1 text-xs text-red-700 list-disc list-inside">

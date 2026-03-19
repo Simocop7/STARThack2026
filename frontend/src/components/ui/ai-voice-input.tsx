@@ -53,6 +53,8 @@ export function AIVoiceInput({
   useEffect(() => {
     if (submitted) {
       // Starting
+      if (userActionRef.current) onStart?.();
+
       timeRef.current = 0;
       setTime(0);
 
@@ -62,6 +64,8 @@ export function AIVoiceInput({
       }, 1000);
     } else {
       // Stopping
+      if (userActionRef.current) onStop?.(timeRef.current);
+
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -119,12 +123,7 @@ export function AIVoiceInput({
       setIsDemo(false);
       setSubmitted(false);
     } else {
-      const next = !submitted;
-      // Call callbacks synchronously so SpeechRecognition start stays within user gesture.
-      if (next) onStart?.();
-      else onStop?.(timeRef.current);
-      userActionRef.current = false;
-      setSubmitted(next);
+      setSubmitted((prev) => !prev);
     }
   };
 

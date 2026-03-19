@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useRef } from "react";
 import { VoicePoweredOrb } from "./ui/voice-powered-orb";
 
 type OverlayPhase = "listening" | "processing" | "speaking" | "closing";
@@ -37,8 +37,6 @@ export default function VoiceOverlay({
     if (el) el.style.setProperty("--volume", String(volumeLevel));
   }, [volumeLevel]);
 
-  const orbScale = phase === "listening" ? 1 + Math.max(0, Math.min(1, volumeLevel)) * 0.08 : 1;
-
   if (!active) return null;
 
   const statusText =
@@ -52,6 +50,15 @@ export default function VoiceOverlay({
     : phase === "processing" ? "voice-orb-processing"
     : phase === "speaking" ? "voice-orb-speaking"
     : "";
+
+  const OrbInner = (
+    <VoicePoweredOrb
+      enableVoiceControl={phase === "listening"}
+      externalVolumeLevel={phase === "listening" ? Math.max(0, Math.min(1, volumeLevel)) : 0}
+      hue={0}
+      className="w-full h-full"
+    />
+  );
 
   return (
     <div
@@ -102,39 +109,25 @@ export default function VoiceOverlay({
           </>
         )}
 
-        {/* Voice orb */}
+        {/* Orb wrapper — carries phase class for CSS-driven glow/scale */}
         {phase === "listening" && onStopListening ? (
           <button
             ref={orbBtnRef}
             type="button"
             onClick={onStopListening}
             title="Tap to finish"
-            className={`w-60 h-60 rounded-full cursor-pointer border-0 outline-none bg-transparent p-0 ${orbClass}`}
-            style={{ "--volume": "0" } as CSSProperties}
+            className={`w-60 h-60 rounded-full overflow-hidden cursor-pointer border-0 outline-none bg-black p-0 ${orbClass}`}
+            style={{ "--volume": "0" } as React.CSSProperties}
           >
-            <div className="w-full h-full rounded-full overflow-hidden border border-red-300/20 shadow-[0_0_60px_rgba(127,29,29,0.45)] transition-transform" style={{ transform: `scale(${orbScale})` }}>
-              <VoicePoweredOrb
-                enableVoiceControl={phase === "listening"}
-                externalVolumeLevel={phase === "listening" ? Math.max(0, Math.min(1, volumeLevel)) : 0}
-                hue={0}
-                className="w-full h-full"
-              />
-            </div>
+            {OrbInner}
           </button>
         ) : (
           <div
             ref={orbDivRef}
-            className={`w-60 h-60 rounded-full ${orbClass}`}
-            style={{ "--volume": "0" } as CSSProperties}
+            className={`w-60 h-60 rounded-full overflow-hidden bg-black ${orbClass}`}
+            style={{ "--volume": "0" } as React.CSSProperties}
           >
-            <div className="w-full h-full rounded-full overflow-hidden border border-red-300/20 shadow-[0_0_60px_rgba(127,29,29,0.35)]">
-              <VoicePoweredOrb
-                enableVoiceControl={phase === "listening"}
-                externalVolumeLevel={phase === "listening" ? Math.max(0, Math.min(1, volumeLevel)) : 0}
-                hue={0}
-                className="w-full h-full"
-              />
-            </div>
+            {OrbInner}
           </div>
         )}
 
