@@ -671,6 +671,231 @@ function BestInCategoryCard({
   );
 }
 
+// ── Scoring methodology panel ───────────────────────────────────────
+
+function ScoringMethodologyPanel({ weights }: { weights: { price: number; quality: number; risk: number; esg: number; lead_time: number } }) {
+  const [open, setOpen] = useState(false);
+
+  const params = [
+    {
+      key: "price",
+      label: "Price",
+      icon: "💰",
+      weight: weights.price,
+      color: "text-emerald-700",
+      bg: "bg-emerald-50 border-emerald-200",
+      how: "Reciprocal proportion: the cheapest supplier scores 100. Every other supplier scores (min_price ÷ their_price) × 100. A supplier costing 50% more than the cheapest scores 66.7 — naturally penalising expensive options without collapsing the scale to 0/100 extremes.",
+    },
+    {
+      key: "quality",
+      label: "Quality",
+      icon: "⭐",
+      weight: weights.quality,
+      color: "text-blue-700",
+      bg: "bg-blue-50 border-blue-200",
+      how: "Raw dataset value (0–100) sourced directly from the supplier master file. Reflects third-party quality audits, delivery reliability, and defect rates. Higher is better. No normalisation applied — the score is used as-is so comparisons remain stable across different shortlists.",
+    },
+    {
+      key: "risk",
+      label: "Trustworthiness",
+      icon: "🤝",
+      weight: weights.risk,
+      color: "text-amber-700",
+      bg: "bg-amber-50 border-amber-200",
+      how: "Derived from the supplier's raw risk score (0–100) by inversion: Trustworthiness = 100 − risk_score. A risk score of 20 becomes a trustworthiness of 80. This ensures a higher bar always means a safer, more reliable supplier — consistent with all other dimensions.",
+    },
+    {
+      key: "esg",
+      label: "ESG",
+      icon: "🌱",
+      weight: weights.esg,
+      color: "text-green-700",
+      bg: "bg-green-50 border-green-200",
+      how: "Raw dataset value (0–100) from the supplier's Environmental, Social & Governance assessment. Covers carbon footprint, labour practices, and governance transparency. Higher is better. Applied directly without normalisation.",
+    },
+    {
+      key: "lead_time",
+      label: "Lead Time",
+      icon: "⚡",
+      weight: weights.lead_time,
+      color: "text-purple-700",
+      bg: "bg-purple-50 border-purple-200",
+      how: "Binary feasibility score against the requested delivery deadline: 100 if the standard lead time meets the deadline; 50 if only expedited delivery meets it (≈+8% price premium required); 0 if neither option can meet the deadline. When no deadline is specified, all suppliers default to 100.",
+    },
+  ];
+
+  const totalWeight = params.reduce((s, p) => s + p.weight, 0);
+
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+      >
+        <span className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+          <span className="text-base">📐</span>
+          Scoring Methodology
+          <span className="text-xs font-normal text-gray-400">— how suppliers are ranked</span>
+        </span>
+        <span className="text-gray-400 text-xs">{open ? "▲ hide" : "▼ show"}</span>
+      </button>
+
+      {open && (
+        <div className="px-5 py-4 space-y-5 bg-white">
+
+          {/* Composite formula */}
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Composite Score Formula</p>
+            <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 font-mono text-sm text-slate-800 leading-relaxed">
+              Score = {params.map((p, i) => (
+                <span key={p.key}>
+                  <span className="font-bold">{(p.weight * 100).toFixed(0)}%</span>
+                  <span className="text-slate-500"> × </span>
+                  <span className={p.color}>{p.label}</span>
+                  {i < params.length - 1 && <span className="text-slate-400">  +  </span>}
+                </span>
+              ))}
+              <span className="text-slate-400">  =  </span>
+              <span className="font-bold text-slate-900">0–100</span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1.5">
+              All dimensions are normalised to a 0–100 scale before weighting. The composite score therefore also sits on a 0–100 scale. Weights must sum to 100% — current total: {(totalWeight * 100).toFixed(0)}%.
+            </p>
+          </div>
+
+          {/* Per-parameter breakdown */}
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Parameter Details</p>
+            <div className="space-y-2.5">
+              {params.map((p) => (
+                <div key={p.key} className={`border rounded-lg px-4 py-3 ${p.bg}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-base">{p.icon}</span>
+                    <span className={`text-sm font-bold ${p.color}`}>{p.label}</span>
+                    <span className="ml-auto text-xs font-bold text-gray-600 bg-white border border-gray-200 rounded-full px-2 py-0.5">
+                      ×{(p.weight * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600 leading-relaxed">{p.how}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Weights bar */}
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Weight Distribution</p>
+            <div className="flex h-4 rounded-full overflow-hidden w-full">
+              {params.map((p) => (
+                <div
+                  key={p.key}
+                  style={{ width: `${p.weight * 100}%` }}
+                  className={`flex items-center justify-center text-[9px] font-bold text-white ${
+                    p.key === "price" ? "bg-emerald-500"
+                    : p.key === "quality" ? "bg-blue-500"
+                    : p.key === "risk" ? "bg-amber-500"
+                    : p.key === "esg" ? "bg-green-500"
+                    : "bg-purple-500"
+                  }`}
+                  title={`${p.label}: ${(p.weight * 100).toFixed(0)}%`}
+                >
+                  {(p.weight * 100).toFixed(0)}%
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
+              {params.map((p) => (
+                <span key={p.key} className={`text-[10px] font-medium ${p.color}`}>
+                  {p.icon} {p.label}
+                </span>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Contact platforms footer ─────────────────────────────────────────
+
+const PLATFORMS = [
+  {
+    name: "SAP Ariba",
+    description: "Supplier discovery & sourcing events",
+    icon: "🔷",
+    url: "https://service.ariba.com/Supplier.aw/109537048/aw?awh=r&awssk=YV_gM3EE&dard=1",
+    color: "hover:border-blue-300 hover:bg-blue-50",
+    labelColor: "text-blue-700",
+  },
+  {
+    name: "Coupa",
+    description: "Procurement & supplier management",
+    icon: "🟠",
+    url: "https://supplier.coupahost.com/sessions/new",
+    color: "hover:border-orange-300 hover:bg-orange-50",
+    labelColor: "text-orange-700",
+  },
+  {
+    name: "Archlet",
+    description: "Sourcing optimisation & analytics",
+    icon: "🟣",
+    url: "https://www.archlet.io/",
+    color: "hover:border-purple-300 hover:bg-purple-50",
+    labelColor: "text-purple-700",
+  },
+  {
+    name: "Apadua",
+    description: "Strategic category management",
+    icon: "🟢",
+    url: "https://apadua.com/",
+    color: "hover:border-green-300 hover:bg-green-50",
+    labelColor: "text-green-700",
+  },
+  {
+    name: "Keelvar",
+    description: "AI-powered sourcing automation",
+    icon: "🔵",
+    url: "https://www.keelvar.com/",
+    color: "hover:border-cyan-300 hover:bg-cyan-50",
+    labelColor: "text-cyan-700",
+  },
+];
+
+function ContactPlatforms() {
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+        <span className="text-base">🔗</span>
+        <span className="text-sm font-semibold text-gray-700">Contact Suppliers Directly</span>
+        <span className="text-xs text-gray-400 ml-1">— via external procurement platforms</span>
+      </div>
+      <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {PLATFORMS.map((p) => (
+          <a
+            key={p.name}
+            href={p.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`flex flex-col gap-1.5 border border-gray-200 rounded-xl p-3 transition-all cursor-pointer bg-white ${p.color}`}
+          >
+            <span className="text-xl">{p.icon}</span>
+            <span className={`text-xs font-bold ${p.labelColor}`}>{p.name}</span>
+            <span className="text-[10px] text-gray-500 leading-tight">{p.description}</span>
+            <span className="text-[10px] text-gray-400 mt-auto flex items-center gap-0.5">
+              Open ↗
+            </span>
+          </a>
+        ))}
+      </div>
+      <p className="px-4 pb-3 text-[10px] text-gray-400">
+        These links open external procurement platforms in a new tab. Supplier negotiations and RFQ submissions must be conducted through your company's approved channels.
+      </p>
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────
 
 export default function SupplierRankingView({ result, onNewRequest, onSelectSupplier, orderContext }: Props) {
@@ -773,6 +998,9 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
         </div>
       )}
 
+      {/* Scoring methodology */}
+      <ScoringMethodologyPanel weights={result.scoring_weights} />
+
       {/* Blocking escalations */}
       {blockingEscalations.length > 0 && (
         <div className="space-y-2">
@@ -829,21 +1057,24 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
         </div>
       )}
 
-      {/* Best-per-parameter cards */}
+      {/* Best-per-parameter cards — horizontal scroll */}
       {result.ranking.length > 0 ? (
-        <div className="space-y-4">
-          <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">
-            Best Supplier per Category
+        <div>
+          <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">
+            Supplier Comparison
           </h3>
-          {winnerSuppliers.map((supplier) => (
-            <BestInCategoryCard
-              key={supplier.supplier_id}
-              supplier={supplier}
-              wonParams={winnerMap.get(supplier.supplier_id) ?? []}
-              currency={currency}
-              onSelect={onSelectSupplier}
-            />
-          ))}
+          <div className="flex gap-4 overflow-x-auto pb-3 -mx-1 px-1">
+            {winnerSuppliers.map((supplier) => (
+              <div key={supplier.supplier_id} className="min-w-[300px] max-w-[340px] flex-shrink-0">
+                <BestInCategoryCard
+                  supplier={supplier}
+                  wonParams={winnerMap.get(supplier.supplier_id) ?? []}
+                  currency={currency}
+                  onSelect={onSelectSupplier}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       ) : (
         <div className="text-center py-16 bg-white border border-dashed border-gray-300 rounded-2xl">
@@ -906,6 +1137,10 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
           <p className="text-xs text-gray-400 mt-2 italic">AI note: {result.llm_fallback_reason}</p>
         )}
       </div>
+
+      {/* Contact platforms */}
+      <ContactPlatforms />
+
     </div>
   );
 }
