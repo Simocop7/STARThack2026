@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import type { FormData } from "../types";
 import VoiceInput, { type VoiceInputHandle } from "./VoiceInput";
-import { AIVoiceInput } from "./ui/ai-voice-input";
+
 
 const LANGUAGES = [
   { code: "en", label: "English" },
@@ -180,6 +180,8 @@ export default function RequestForm({
       request_text: "",
       quantity: null,
       unit_of_measure: "",
+      budget_amount: null,
+      currency: "EUR",
       category_l1: "",
       category_l2: "",
       delivery_country: "",
@@ -310,6 +312,8 @@ export default function RequestForm({
         request_text: r.request_text || "",
         quantity: r.quantity ?? null,
         unit_of_measure: r.unit_of_measure || "",
+        budget_amount: r.budget_amount ?? null,
+        currency: r.currency || "EUR",
         category_l1: r.category_l1 || "",
         category_l2: r.category_l2 || "",
         delivery_country: r.delivery_countries?.[0] || r.country || "",
@@ -352,17 +356,29 @@ export default function RequestForm({
       parsed = localParseVoiceTranscript(transcript, form.language);
     }
 
-    // Merge parsed fields into form, preserving existing non-empty values
+    // Merge parsed fields into form, preserving existing non-empty values.
+    // request_text: prefer the LLM-cleaned version from parse-voice (stripped of
+    // conversational filler), falling back to the raw transcript.
+    // category_l1/l2: never filled by parse-voice (the /api/validate LLM does
+    // that), so always leave them empty here — the backend will auto-detect them
+    // from request_text. Do NOT preserve a stale previous category if request_text changed.
     let updatedForm: FormData = formRef.current;
     setForm((prev) => {
+      const newRequestText = parsed.request_text || transcript;
+      const requestTextChanged = newRequestText !== prev.request_text;
       const updated = {
         ...prev,
-        request_text: prev.request_text || parsed.request_text || transcript,
+        request_text: newRequestText,
         quantity: parsed.quantity ?? prev.quantity,
         unit_of_measure: parsed.unit_of_measure || prev.unit_of_measure,
+        budget_amount: parsed.budget_amount ?? prev.budget_amount,
+        currency: parsed.currency || prev.currency,
         required_by_date: parsed.required_by_date || prev.required_by_date,
         preferred_supplier: parsed.preferred_supplier || prev.preferred_supplier,
         delivery_country: parsed.delivery_country || prev.delivery_country,
+        // Clear stale categories when request text changes so the backend re-infers them
+        category_l1: requestTextChanged ? "" : prev.category_l1,
+        category_l2: requestTextChanged ? "" : prev.category_l2,
       };
       formRef.current = updated;
       updatedForm = updated;
@@ -394,23 +410,38 @@ export default function RequestForm({
     onRegisterForceTranscript?.((transcript: string) => handleVoiceTranscriptRef.current(transcript));
   }, [onRegisterForceTranscript]);
 
-  const [formErrors, setFormErrors] = useState<string[]>([]);
+  const [fieldErrors, setFieldErrors] = useState<Set<string>>(new Set());
+
+  function clearFieldError(field: string) {
+    setFieldErrors((prev) => {
+      if (!prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    // Programmatic validation (defense-in-depth beyond HTML5 required)
-    const errors: string[] = [];
-    if (!form.request_text.trim()) errors.push(i.requestDescription);
-    if (form.quantity === null || form.quantity < 1) errors.push(i.quantity);
-    if (!form.delivery_country || !(form.delivery_country in VALID_COUNTRY_CODES)) errors.push(i.deliveryCountry);
-    if (!form.required_by_date) errors.push(i.requiredByDate);
+    const errors = new Set<string>();
+    if (!form.request_text.trim()) errors.add("request_text");
+    if (form.quantity === null || form.quantity < 1) errors.add("quantity");
+    if (form.budget_amount !== null && (isNaN(form.budget_amount) || form.budget_amount < 0)) errors.add("budget_amount");
+    if (!form.delivery_country || !(form.delivery_country in VALID_COUNTRY_CODES)) errors.add("delivery_country");
+    if (!form.required_by_date) {
+      errors.add("required_by_date");
+    } else {
+      const maxDate = new Date();
+      maxDate.setFullYear(maxDate.getFullYear() + 10);
+      if (new Date(form.required_by_date) > maxDate) errors.add("required_by_date_range");
+    }
 
-    if (errors.length > 0) {
-      setFormErrors(errors);
+    if (errors.size > 0) {
+      setFieldErrors(errors);
       return;
     }
-    setFormErrors([]);
+    setFieldErrors(new Set());
     onSubmit(form);
   }
 
@@ -523,15 +554,13 @@ export default function RequestForm({
                 {i.quantity}
               </label>
               <input
-                required
                 type="number"
-                min={1}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                onInvalid={(e) => e.preventDefault()}
+                className={`w-full border rounded-lg px-3 py-2 text-sm ${fieldErrors.has("quantity") ? "border-red-500" : "border-gray-300"}`}
                 value={form.quantity ?? ""}
-                onChange={(e) =>
-                  update("quantity", e.target.value ? Number(e.target.value) : null)
-                }
+                onChange={(e) => { clearFieldError("quantity"); update("quantity", e.target.value ? Number(e.target.value) : null); }}
               />
+              {fieldErrors.has("quantity") && <p className="mt-1 text-xs text-red-600">{i.quantity}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -547,6 +576,47 @@ export default function RequestForm({
             </div>
           </div>
 
+          {/* Budget + currency */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {i.budgetAmount}
+              </label>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                onInvalid={(e) => e.preventDefault()}
+                className={`w-full border rounded-lg px-3 py-2 text-sm ${fieldErrors.has("budget_amount") ? "border-red-500" : "border-gray-300"}`}
+                placeholder={i.budgetPlaceholder}
+                value={form.budget_amount ?? ""}
+                onChange={(e) => {
+                  clearFieldError("budget_amount");
+                  update("budget_amount", e.target.value ? Number(e.target.value) : null);
+                }}
+              />
+              {fieldErrors.has("budget_amount") && (
+                <p className="mt-1 text-xs text-red-600">Please enter a valid positive number</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {i.currency}
+              </label>
+              <select
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+                value={form.currency}
+                onChange={(e) => update("currency", e.target.value)}
+              >
+                <option value="EUR">EUR — Euro</option>
+                <option value="CHF">CHF — Swiss Franc</option>
+                <option value="USD">USD — US Dollar</option>
+                <option value="GBP">GBP — British Pound</option>
+                <option value="JPY">JPY — Japanese Yen</option>
+              </select>
+            </div>
+          </div>
+
           {/* Delivery country + date */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -554,14 +624,13 @@ export default function RequestForm({
                 {i.deliveryCountry}
               </label>
               <select
-                required
                 className={`w-full border rounded-lg px-3 py-2 text-sm bg-white ${
-                  form.delivery_country && !(form.delivery_country in VALID_COUNTRY_CODES)
+                  fieldErrors.has("delivery_country") || (form.delivery_country && !(form.delivery_country in VALID_COUNTRY_CODES))
                     ? "border-red-500 text-red-700"
                     : "border-gray-300"
                 }`}
                 value={form.delivery_country}
-                onChange={(e) => update("delivery_country", e.target.value)}
+                onChange={(e) => { clearFieldError("delivery_country"); update("delivery_country", e.target.value); }}
               >
                 <option value="">{i.deliveryCountryPlaceholder}</option>
                 {Object.entries(VALID_COUNTRY_CODES).map(([code, name]) => (
@@ -570,6 +639,9 @@ export default function RequestForm({
                   </option>
                 ))}
               </select>
+              {fieldErrors.has("delivery_country") && !form.delivery_country && (
+                <p className="mt-1 text-xs text-red-600">{i.deliveryCountry}</p>
+              )}
               {form.delivery_country && !(form.delivery_country in VALID_COUNTRY_CODES) && (
                 <p className="mt-1 text-xs text-red-600">
                   Invalid country code. Please select a valid country.
@@ -581,20 +653,21 @@ export default function RequestForm({
                 {i.requiredByDate}
               </label>
               <input
-                required
                 type="date"
-                min="2020-01-01"
-                max="9999-12-31"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                onInvalid={(e) => e.preventDefault()}
+                className={`w-full border rounded-lg px-3 py-2 text-sm ${fieldErrors.has("required_by_date") || fieldErrors.has("required_by_date_range") ? "border-red-500" : "border-gray-300"}`}
                 value={form.required_by_date}
                 onChange={(e) => {
                   const val = e.target.value;
-                  // Reject dates with year > 4 digits
                   const yearPart = val.split("-")[0];
                   if (yearPart && yearPart.length > 4) return;
+                  clearFieldError("required_by_date");
+                  clearFieldError("required_by_date_range");
                   update("required_by_date", val);
                 }}
               />
+              {fieldErrors.has("required_by_date") && <p className="mt-1 text-xs text-red-600">{i.requiredByDate}</p>}
+              {fieldErrors.has("required_by_date_range") && <p className="mt-1 text-xs text-red-600">{i.dateInvalidRange}</p>}
             </div>
           </div>
 
@@ -619,13 +692,13 @@ export default function RequestForm({
               {i.requestDescription}
             </label>
             <textarea
-              required
               rows={5}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 ${fieldErrors.has("request_text") ? "border-red-500" : "border-gray-300"}`}
               placeholder={i.requestPlaceholder}
               value={form.request_text}
-              onChange={(e) => update("request_text", e.target.value)}
+              onChange={(e) => { clearFieldError("request_text"); update("request_text", e.target.value); }}
             />
+            {fieldErrors.has("request_text") && <p className="mt-1 text-xs text-red-600">{i.requestDescription}</p>}
             <p className="mt-2 text-xs text-gray-500">{i.categoryAutoDetectHint}</p>
           </div>
 
@@ -634,20 +707,28 @@ export default function RequestForm({
               <label className="block text-sm font-semibold text-red-900">
                 {i.voiceInputLabel}
               </label>
-              <p className="text-xs text-red-500 mt-0.5">{i.voiceInputHint}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{i.voiceInputHint}</p>
             </div>
 
             {/* AI voice activation button */}
             {onActivateVoiceOverlay && (
               <div className={voiceParsing ? "pointer-events-none opacity-70" : undefined}>
-                <AIVoiceInput
-                  active={overlayActive}
-                  onStart={() => {
-                    if (voiceParsing) return;
-                    onActivateVoiceOverlay();
-                  }}
-                  onStop={() => onDeactivateVoiceOverlay?.()}
-                />
+                <button
+                  type="button"
+                  onClick={onActivateVoiceOverlay}
+                  disabled={voiceParsing}
+                  className="relative flex items-center gap-2 px-5 py-3 rounded-full font-medium text-sm
+                    bg-gradient-to-r from-red-600 via-red-700 to-red-800 text-white
+                    hover:from-red-500 hover:via-red-600 hover:to-red-700
+                    shadow-lg shadow-red-200 hover:shadow-xl hover:shadow-red-300
+                    transition-all
+                    disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  </svg>
+                  Voice Mode
+                </button>
               </div>
             )}
 

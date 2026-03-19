@@ -20,9 +20,13 @@ interface Translations {
   quantity: string;
   unitOfMeasure: string;
   unitPlaceholder: string;
+  budgetAmount: string;
+  budgetPlaceholder: string;
+  currency: string;
   deliveryCountry: string;
   deliveryCountryPlaceholder: string;
   requiredByDate: string;
+  dateInvalidRange: string;
   preferredSupplier: string;
   supplierPlaceholder: string;
   validateRequest: string;
@@ -74,6 +78,8 @@ interface Translations {
   reviewCategory: string;
   reviewItemDescription: string;
   reviewQuantity: string;
+  reviewBudget: string;
+  reviewCurrency: string;
   reviewDelivery: string;
   reviewDeliveryCountry: string;
   reviewRequiredBy: string;
@@ -112,9 +118,13 @@ const translations: Record<LangCode, Translations> = {
     quantity: "Quantity *",
     unitOfMeasure: "Unit of measure",
     unitPlaceholder: "\"unit\" if none needed — e.g. device, consulting_day, campaign",
+    budgetAmount: "Budget",
+    budgetPlaceholder: "e.g. 50000",
+    currency: "Currency",
     deliveryCountry: "Delivery Country *",
     deliveryCountryPlaceholder: "e.g. DE, CH, US, FR",
     requiredByDate: "Required by date *",
+    dateInvalidRange: "Date must be within the next 10 years",
     preferredSupplier: "Preferred supplier (optional)",
     supplierPlaceholder: "e.g. Dell, Accenture...",
     validateRequest: "Validate Request",
@@ -154,6 +164,8 @@ const translations: Record<LangCode, Translations> = {
     reviewCategory: "Category",
     reviewItemDescription: "Item Description",
     reviewQuantity: "Quantity",
+    reviewBudget: "Budget",
+    reviewCurrency: "Currency",
     reviewDelivery: "Delivery Country",
     reviewDeliveryCountry: "Delivery Country",
     reviewRequiredBy: "Required By",
@@ -188,9 +200,13 @@ const translations: Record<LangCode, Translations> = {
     quantity: "Quantité *",
     unitOfMeasure: "Unité de mesure",
     unitPlaceholder: "\"unit\" si aucun nécessaire — ex. appareil, jour_consultation, campagne",
+    budgetAmount: "Budget",
+    budgetPlaceholder: "ex. 50000",
+    currency: "Devise",
     deliveryCountry: "Pays de livraison *",
     deliveryCountryPlaceholder: "ex. DE, CH, US, FR",
     requiredByDate: "Date limite *",
+    dateInvalidRange: "La date doit être dans les 10 prochaines années",
     preferredSupplier: "Fournisseur préféré (optionnel)",
     supplierPlaceholder: "ex. Dell, Accenture...",
     validateRequest: "Valider la demande",
@@ -230,6 +246,8 @@ const translations: Record<LangCode, Translations> = {
     reviewCategory: "Catégorie",
     reviewItemDescription: "Description de l'article",
     reviewQuantity: "Quantité",
+    reviewBudget: "Budget",
+    reviewCurrency: "Devise",
     reviewDelivery: "Pays de livraison",
     reviewDeliveryCountry: "Pays de livraison",
     reviewRequiredBy: "Date limite",
@@ -264,9 +282,13 @@ const translations: Record<LangCode, Translations> = {
     quantity: "Menge *",
     unitOfMeasure: "Maßeinheit",
     unitPlaceholder: "\"unit\" wenn keines nötig — z.B. Gerät, Beratungstag, Kampagne",
+    budgetAmount: "Budget",
+    budgetPlaceholder: "z.B. 50000",
+    currency: "Währung",
     deliveryCountry: "Lieferland *",
     deliveryCountryPlaceholder: "z.B. DE, CH, US, FR",
     requiredByDate: "Benötigt bis *",
+    dateInvalidRange: "Datum muss innerhalb der nächsten 10 Jahre liegen",
     preferredSupplier: "Bevorzugter Lieferant (optional)",
     supplierPlaceholder: "z.B. Dell, Accenture...",
     validateRequest: "Anfrage validieren",
@@ -306,6 +328,8 @@ const translations: Record<LangCode, Translations> = {
     reviewCategory: "Kategorie",
     reviewItemDescription: "Artikelbeschreibung",
     reviewQuantity: "Menge",
+    reviewBudget: "Budget",
+    reviewCurrency: "Währung",
     reviewDelivery: "Lieferland",
     reviewDeliveryCountry: "Lieferland",
     reviewRequiredBy: "Benötigt bis",
@@ -340,9 +364,13 @@ const translations: Record<LangCode, Translations> = {
     quantity: "Cantidad *",
     unitOfMeasure: "Unidad de medida",
     unitPlaceholder: "\"unit\" si no se necesita — ej. dispositivo, día_consultoría, campaña",
+    budgetAmount: "Presupuesto",
+    budgetPlaceholder: "ej. 50000",
+    currency: "Divisa",
     deliveryCountry: "País de entrega *",
     deliveryCountryPlaceholder: "ej. DE, CH, US, FR",
     requiredByDate: "Fecha límite *",
+    dateInvalidRange: "La fecha debe estar dentro de los próximos 10 años",
     preferredSupplier: "Proveedor preferido (opcional)",
     supplierPlaceholder: "ej. Dell, Accenture...",
     validateRequest: "Validar solicitud",
@@ -382,6 +410,8 @@ const translations: Record<LangCode, Translations> = {
     reviewCategory: "Categoría",
     reviewItemDescription: "Descripción del artículo",
     reviewQuantity: "Cantidad",
+    reviewBudget: "Presupuesto",
+    reviewCurrency: "Divisa",
     reviewDelivery: "País de entrega",
     reviewDeliveryCountry: "País de entrega",
     reviewRequiredBy: "Fecha límite",
@@ -416,9 +446,13 @@ const translations: Record<LangCode, Translations> = {
     quantity: "Quantidade *",
     unitOfMeasure: "Unidade de medida",
     unitPlaceholder: "\"unit\" se nenhum necessário — ex. dispositivo, dia_consultoria, campanha",
+    budgetAmount: "Orçamento",
+    budgetPlaceholder: "ex. 50000",
+    currency: "Moeda",
     deliveryCountry: "País de entrega *",
     deliveryCountryPlaceholder: "ex. DE, CH, US, FR",
     requiredByDate: "Data limite *",
+    dateInvalidRange: "La data deve essere entro i prossimi 10 anni",
     preferredSupplier: "Fornecedor preferido (opcional)",
     supplierPlaceholder: "ex. Dell, Accenture...",
     validateRequest: "Validar solicitação",
@@ -458,6 +492,8 @@ const translations: Record<LangCode, Translations> = {
     reviewCategory: "Categoria",
     reviewItemDescription: "Descrição do item",
     reviewQuantity: "Quantidade",
+    reviewBudget: "Orçamento",
+    reviewCurrency: "Moeda",
     reviewDelivery: "País de entrega",
     reviewDeliveryCountry: "País de entrega",
     reviewRequiredBy: "Data limite",
@@ -492,9 +528,13 @@ const translations: Record<LangCode, Translations> = {
     quantity: "Quantità *",
     unitOfMeasure: "Unità di misura",
     unitPlaceholder: "\"unit\" se nessuno necessario — es. dispositivo, giorno_consulenza, campagna",
+    budgetAmount: "Budget",
+    budgetPlaceholder: "es. 50000",
+    currency: "Valuta",
     deliveryCountry: "Paese di consegna *",
     deliveryCountryPlaceholder: "es. DE, CH, US, FR",
     requiredByDate: "Data di scadenza *",
+    dateInvalidRange: "La data deve essere entro i prossimi 10 anni",
     preferredSupplier: "Fornitore preferito (opzionale)",
     supplierPlaceholder: "es. Dell, Accenture...",
     validateRequest: "Valida richiesta",
@@ -534,6 +574,8 @@ const translations: Record<LangCode, Translations> = {
     reviewCategory: "Categoria",
     reviewItemDescription: "Descrizione articolo",
     reviewQuantity: "Quantità",
+    reviewBudget: "Budget",
+    reviewCurrency: "Valuta",
     reviewDelivery: "Paese di consegna",
     reviewDeliveryCountry: "Paese di consegna",
     reviewRequiredBy: "Data di scadenza",
@@ -568,9 +610,13 @@ const translations: Record<LangCode, Translations> = {
     quantity: "数量 *",
     unitOfMeasure: "単位",
     unitPlaceholder: "不要な場合は「unit」— 例: デバイス、コンサルティング日、キャンペーン",
+    budgetAmount: "予算",
+    budgetPlaceholder: "例: 50000",
+    currency: "通貨",
     deliveryCountry: "配送先国 *",
     deliveryCountryPlaceholder: "例: DE, CH, US, FR",
     requiredByDate: "希望納期 *",
+    dateInvalidRange: "日付は今後10年以内である必要があります",
     preferredSupplier: "希望サプライヤー（任意）",
     supplierPlaceholder: "例：Dell、Accenture...",
     validateRequest: "リクエストを検証",
@@ -610,6 +656,8 @@ const translations: Record<LangCode, Translations> = {
     reviewCategory: "カテゴリ",
     reviewItemDescription: "アイテムの説明",
     reviewQuantity: "数量",
+    reviewBudget: "予算",
+    reviewCurrency: "通貨",
     reviewDelivery: "配送先国",
     reviewDeliveryCountry: "配送先国",
     reviewRequiredBy: "希望納期",

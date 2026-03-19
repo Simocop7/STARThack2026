@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { voiceLog } from "../lib/voiceLogger";
 
 interface SpeechRecognitionEvent {
   results: { [index: number]: { [index: number]: { transcript: string } }; length: number };
@@ -74,21 +75,28 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) {
         setSupported(false);
+        voiceLog("recognition", "not supported", "SpeechRecognition API unavailable in this browser");
+      } else {
+        voiceLog("recognition", "supported", "SpeechRecognition API available");
       }
     }, []);
 
     const stopListening = useCallback(() => {
+      voiceLog("recognition", "stopListening called");
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current);
         silenceTimerRef.current = null;
+        voiceLog("timer", "silence timer cleared");
       }
       if (maxDurationTimerRef.current) {
         clearTimeout(maxDurationTimerRef.current);
         maxDurationTimerRef.current = null;
+        voiceLog("timer", "max-duration timer cleared");
       }
       if (inactivityTimerRef.current) {
         clearInterval(inactivityTimerRef.current);
         inactivityTimerRef.current = null;
+        voiceLog("timer", "inactivity timer cleared");
       }
       if (recognitionRef.current) {
         recognitionRef.current.stop();
@@ -96,6 +104,7 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
       } else {
         const transcript = finalTranscriptRef.current.trim();
         if (transcript) {
+          voiceLog("transcript", "emitting transcript (no-recognition path)", `"${transcript.slice(0, 80)}"`);
           onTranscript(transcript);
         }
       }
@@ -137,6 +146,7 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
       // Bump session so stale onend callbacks are ignored
       sessionIdRef.current += 1;
       const thisSession = sessionIdRef.current;
+      voiceLog("session", `session started`, `id=${thisSession} lang=${recognition.lang} continuous=${recognition.continuous} autoStop=${autoStopOnSilence}`);
 
       finalTranscriptRef.current = "";
       lastTranscriptChangeRef.current = Date.now();
@@ -145,7 +155,10 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
         // Ignore events from a stale session
-        if (thisSession !== sessionIdRef.current) return;
+        if (thisSession !== sessionIdRef.current) {
+          voiceLog("session", "stale onresult ignored", `stale=${thisSession} current=${sessionIdRef.current}`);
+          return;
+        }
         let interimText = "";
         let finalText = "";
 
@@ -162,6 +175,10 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
 
         if (finalText) {
           finalTranscriptRef.current += finalText;
+          voiceLog("transcript", "final chunk", `"${finalText.slice(0, 100)}" → accumulated="${finalTranscriptRef.current.slice(0, 100)}"`);
+        }
+        if (interimText) {
+          voiceLog("transcript", "interim", `"${interimText.slice(0, 100)}"`);
         }
 
         // Track when the transcript actually changes (for inactivity detection)
@@ -180,44 +197,58 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
         if (autoStopOnSilence && finalTranscriptRef.current.trim()) {
           if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
           silenceTimerRef.current = setTimeout(() => {
+            voiceLog("timer", "silence timer fired → stopping recognition");
             if (recognitionRef.current) {
               recognitionRef.current.stop();
             }
           }, 1500);
+          voiceLog("timer", "silence timer (re)set", "1500ms");
         }
       };
 
       recognition.onerror = (event: { error: string }) => {
-        if (thisSession !== sessionIdRef.current) return;
+        if (thisSession !== sessionIdRef.current) {
+          voiceLog("session", "stale onerror ignored", `stale=${thisSession} current=${sessionIdRef.current} error=${event.error}`);
+          return;
+        }
         if (event.error === "no-speech") {
           // "no-speech" is normal — browser fires onend after this, which handles cleanup.
-          // Do NOT call stopListening here as it kills the session prematurely.
+          voiceLog("recognition", "error: no-speech", "browser will fire onend — not stopping manually");
           return;
         }
         if (event.error === "aborted") {
           // "aborted" happens when we programmatically stop — safe to ignore
+          voiceLog("recognition", "error: aborted", "programmatic stop — ignoring");
           return;
         }
+        voiceLog("recognition", `error: ${event.error}`, "calling stopListening");
         console.error("Speech recognition error:", event.error);
         stopListening();
       };
 
       recognition.onend = () => {
         // Ignore onend from a stale session (previous recognition that fired late)
-        if (thisSession !== sessionIdRef.current) return;
+        if (thisSession !== sessionIdRef.current) {
+          voiceLog("session", "stale onend ignored", `stale=${thisSession} current=${sessionIdRef.current}`);
+          return;
+        }
+        voiceLog("recognition", "onend fired", `final="${finalTranscriptRef.current.slice(0, 80)}" lastSeen="${lastSeenTranscript.slice(0, 80)}"`);
 
         // Clean up all timers since the session is ending
         if (silenceTimerRef.current) {
           clearTimeout(silenceTimerRef.current);
           silenceTimerRef.current = null;
+          voiceLog("timer", "silence timer cleared on onend");
         }
         if (maxDurationTimerRef.current) {
           clearTimeout(maxDurationTimerRef.current);
           maxDurationTimerRef.current = null;
+          voiceLog("timer", "max-duration timer cleared on onend");
         }
         if (inactivityTimerRef.current) {
           clearInterval(inactivityTimerRef.current);
           inactivityTimerRef.current = null;
+          voiceLog("timer", "inactivity timer cleared on onend");
         }
         recognitionRef.current = null;
 
@@ -227,10 +258,11 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
         const transcript = finalTranscriptRef.current.trim() || lastSeenTranscript.trim();
         setInterim("");
         if (transcript) {
+          voiceLog("transcript", "emitting final transcript", `"${transcript.slice(0, 100)}"`);
           onTranscript(transcript);
         } else {
           // No transcript captured (e.g. no-speech, background noise, mic cut off)
-          // Notify parent so it can decide whether to restart listening
+          voiceLog("transcript", "empty end — no transcript captured", "calling onEmptyEnd");
           onEmptyEnd?.();
         }
       };
@@ -238,26 +270,33 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
       recognitionRef.current = recognition;
       try {
         recognition.start();
-      } catch {
+        voiceLog("recognition", "start() called", `session=${thisSession}`);
+      } catch (err) {
         // Browser may not be ready (e.g. previous session still closing) — retry after delay
         if (retryCount < 3) {
           const delay = 300 + retryCount * 200; // 300, 500, 700ms
+          voiceLog("recognition", `start() failed — retry ${retryCount + 1}/3`, `delay=${delay}ms err=${String(err)}`);
           setTimeout(() => startListening(retryCount + 1), delay);
+        } else {
+          voiceLog("recognition", "start() failed — max retries reached", String(err));
         }
         return;
       }
       setListening(true);
       onListeningChange?.(true);
+      voiceLog("phase", "listening started");
 
       // Overlay mode: add safety-net timers that don't depend on isFinal
       if (autoStopOnSilence) {
         // Max duration: force-stop after 15s no matter what
         // NOTE: Do NOT null recognitionRef here — let onend handle cleanup.
         maxDurationTimerRef.current = setTimeout(() => {
+          voiceLog("timer", "max-duration timer fired (15s) → stopping recognition");
           if (recognitionRef.current) {
             recognitionRef.current.stop();
           }
         }, 15000);
+        voiceLog("timer", "max-duration timer set", "15000ms");
 
         // Inactivity: stop if transcript hasn't changed for 3s
         // BUT only after the user has actually started speaking (has some transcript).
@@ -267,9 +306,11 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
           if (!hasSpoken) return; // Don't timeout if user hasn't spoken yet
           const elapsed = Date.now() - lastTranscriptChangeRef.current;
           if (elapsed > 3000 && recognitionRef.current) {
+            voiceLog("timer", "inactivity timer fired (3s silence after speech) → stopping recognition", `elapsed=${elapsed}ms`);
             recognitionRef.current.stop();
           }
         }, 500);
+        voiceLog("timer", "inactivity timer set", "polls every 500ms, fires after 3000ms silence");
       }
     }, [language, onTranscript, onInterimChange, stopListening, autoStopOnSilence, onListeningChange, onEmptyEnd]);
 

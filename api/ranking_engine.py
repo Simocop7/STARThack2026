@@ -463,6 +463,20 @@ def _filter_suppliers(
             )
             continue
 
+        # Budget hard filter: exclude suppliers whose total cost exceeds stated budget
+        if order.budget_amount is not None and total_estimate > order.budget_amount:
+            excluded.append(
+                ExcludedSupplier(
+                    supplier_id=sid,
+                    supplier_name=sname,
+                    reason=(
+                        f"Total cost {order.currency} {total_estimate:,.2f} exceeds "
+                        f"stated budget of {order.currency} {order.budget_amount:,.2f}."
+                    ),
+                )
+            )
+            continue
+
         eligible.append({**sup, "_tier": tier, "_total": total_estimate})
 
     return eligible, excluded

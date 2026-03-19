@@ -4,6 +4,8 @@ import EmployeePortal from "./components/EmployeePortal";
 import EmployeeRequestsHistory from "./components/EmployeeRequestsHistory";
 import ProcurementPortal from "./components/ProcurementPortal";
 import AppShell from "./components/AppShell";
+import VoiceDebugPanel from "./components/VoiceDebugPanel";
+import { isVoiceDebugMode } from "./lib/voiceLogger";
 
 type Role = "employee" | "office";
 type OfficeView = "inbox" | "process";
@@ -38,26 +40,29 @@ export default function App() {
   const handleSwitchRole = () => setShowHero(true); // back to hero
 
   return (
-    <AppShell
-      role={role}
-      employeeView={employeeView}
-      officeView={officeView}
-      onNavigate={handleNavigate}
-      onSwitchRole={handleSwitchRole}
-    >
-      {role === "employee" ? (
-        employeeView === "new-request" ? (
-          <EmployeePortal key={empKey} onBack={() => handleSwitchRole()} />
+    <>
+      <AppShell
+        role={role}
+        employeeView={employeeView}
+        officeView={officeView}
+        onNavigate={handleNavigate}
+        onSwitchRole={handleSwitchRole}
+      >
+        {role === "employee" ? (
+          employeeView === "new-request" ? (
+            <EmployeePortal key={empKey} onBack={() => handleSwitchRole()} />
+          ) : (
+            <EmployeeRequestsHistory />
+          )
         ) : (
-          <EmployeeRequestsHistory />
-        )
-      ) : (
-        <ProcurementPortal
-          onBack={() => handleSwitchRole()}
-          externalPhase={officeView}
-          onPhaseChange={setOfficeView}
-        />
-      )}
-    </AppShell>
+          <ProcurementPortal
+            onBack={() => handleSwitchRole()}
+            externalPhase={officeView}
+            onPhaseChange={setOfficeView}
+          />
+        )}
+      </AppShell>
+      {isVoiceDebugMode() && <VoiceDebugPanel />}
+    </>
   );
 }

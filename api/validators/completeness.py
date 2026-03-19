@@ -12,12 +12,19 @@ _REQUIRED_FIELDS = {
     "required_by_date": "Required-by date",
 }
 
+_CATEGORY_FIELDS = {"category_l1", "category_l2"}
 
-def check_completeness(enriched: EnrichedRequest) -> list[ValidationIssue]:
+
+def check_completeness(
+    enriched: EnrichedRequest,
+    skip_category: bool = False,
+) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
     counter = 0
 
     for field, label in _REQUIRED_FIELDS.items():
+        if skip_category and field in _CATEGORY_FIELDS:
+            continue  # LLM fallback: category will be surfaced as SVC-001 instead
         value = getattr(enriched, field, None)
         if value is None or value == "" or value == 0:
             counter += 1

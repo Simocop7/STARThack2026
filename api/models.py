@@ -74,6 +74,8 @@ class FormInput(BaseModel):
     request_text: str = Field(..., min_length=1, max_length=10000)
     quantity: Optional[int] = Field(None, ge=1, le=1_000_000)
     unit_of_measure: Optional[str] = Field(None, max_length=100)
+    budget_amount: Optional[float] = Field(None, ge=0)
+    currency: str = Field(default="EUR", max_length=10)
     category_l1: Optional[str] = Field(None, max_length=100)
     category_l2: Optional[str] = Field(None, max_length=100)
     delivery_country: Optional[str] = Field(None, max_length=3)
@@ -167,6 +169,8 @@ class EnrichedRequest(BaseModel):
     request_text: str
     quantity: Optional[int] = Field(None, ge=1, le=1_000_000)
     unit_of_measure: Optional[str] = None
+    budget_amount: Optional[float] = Field(None, ge=0)
+    currency: str = "EUR"
     category_l1: Optional[str] = None
     category_l2: Optional[str] = None
     delivery_country: Optional[str] = None

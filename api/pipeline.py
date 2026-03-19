@@ -93,6 +93,8 @@ def _fallback_enriched(form_input: FormInput) -> EnrichedRequest:
         request_text=form_input.request_text,
         quantity=form_input.quantity,
         unit_of_measure=form_input.unit_of_measure,
+        budget_amount=form_input.budget_amount,
+        currency=form_input.currency,
         category_l1=form_input.category_l1 or None,
         category_l2=form_input.category_l2 or None,
         delivery_country=form_input.delivery_country,
@@ -142,6 +144,7 @@ async def process_request(form_input: FormInput) -> ValidationResult:
 
     # ── Stage 1: LLM interpretation (with graceful degradation) ──
     _log("1/3", _CYAN, "LLM Interpretation", "sending request to Azure OpenAI …")
+    llm_failed = False
     try:
         enriched = await asyncio.wait_for(
             interpret_request(
@@ -158,6 +161,7 @@ async def process_request(form_input: FormInput) -> ValidationResult:
     except Exception:
         logger.exception("LLM interpretation failed — falling back to raw form data")
         _log("  !", _YELLOW, "LLM failed", "using raw form data as fallback")
+        llm_failed = True
         enriched = _fallback_enriched(form_input)
 
     # If the form had a preferred_supplier text but the LLM couldn't resolve it,
@@ -177,32 +181,64 @@ async def process_request(form_input: FormInput) -> ValidationResult:
     cat_suggestion = enriched.category_suggestion
     user_confirmed_category = bool(form_input.category_l1 and form_input.category_l2)
     if cat_suggestion and cat_suggestion.needs_disambiguation and not user_confirmed_category:
-        _log("  !", _YELLOW, "Category ambiguous",
-             f"{cat_suggestion.category_l1}/{cat_suggestion.category_l2} ({cat_suggestion.confidence:.0%} confidence)")
         conf = cat_suggestion.confidence
-        if conf < 0.5:
+        is_out_of_scope = conf == 0.0 or cat_suggestion.category_l1 in ("", "UNKNOWN", None)
+
+        _log("  !", _YELLOW, "Category ambiguous" if not is_out_of_scope else "Category out of scope",
+             f"{cat_suggestion.category_l1}/{cat_suggestion.category_l2} ({conf:.0%} confidence)")
+
+        if is_out_of_scope:
+            description = (
+                f"The request '{enriched.request_text[:120]}' does not match any category "
+                f"in the procurement framework. "
+                f"Reason: {cat_suggestion.reasoning or 'No recognizable procurement category found.'}"
+            )
+            proposed_fix = (
+                "This item does not belong to the procurement framework (IT, Facilities, "
+                "Professional Services, Marketing). Please clarify whether this is a valid "
+                "procurement request or select the closest applicable category manually."
+            )
+            fix_action = FixAction(
+                field="category_l1",
+                suggested_value=None,
+                alternatives=[a.category_l2 for a in cat_suggestion.alternatives] if cat_suggestion.alternatives else [],
+            )
+        elif conf < 0.5:
+            description = (
+                f"Category auto-detected as '{cat_suggestion.category_l1} > {cat_suggestion.category_l2}' "
+                f"with {conf:.0%} confidence. "
+                f"Reason: {cat_suggestion.reasoning}"
+            )
             proposed_fix = "Please confirm or select the correct category."
+            fix_action = FixAction(
+                field="category_l2",
+                suggested_value=cat_suggestion.category_l2,
+                alternatives=[a.category_l2 for a in cat_suggestion.alternatives],
+            )
         else:
+            description = (
+                f"Category auto-detected as '{cat_suggestion.category_l1} > {cat_suggestion.category_l2}' "
+                f"with {conf:.0%} confidence. "
+                f"Reason: {cat_suggestion.reasoning}"
+            )
             proposed_fix = (
                 "Your request is ambiguous — please reformulate it in a more precise manner "
                 "so the correct category can be determined with confidence."
             )
+            fix_action = FixAction(
+                field="category_l2",
+                suggested_value=cat_suggestion.category_l2,
+                alternatives=[a.category_l2 for a in cat_suggestion.alternatives],
+            )
+
         issues_pre: list[ValidationIssue] = [
             ValidationIssue(
                 issue_id="CAT-001",
-                severity=Severity.HIGH,
+                severity=Severity.CRITICAL if is_out_of_scope else Severity.HIGH,
                 type=IssueType.CATEGORY_AMBIGUOUS,
-                description=(
-                    f"Category auto-detected as '{cat_suggestion.category_l1} > {cat_suggestion.category_l2}' "
-                    f"with {cat_suggestion.confidence:.0%} confidence. "
-                    f"Reason: {cat_suggestion.reasoning}"
-                ),
+                description=description,
                 proposed_fix=proposed_fix,
-                fix_action=FixAction(
-                    field="category_l2",
-                    suggested_value=cat_suggestion.category_l2,
-                    alternatives=[a.category_l2 for a in cat_suggestion.alternatives],
-                ),
+                fix_action=fix_action,
             )
         ]
     else:
@@ -212,10 +248,28 @@ async def process_request(form_input: FormInput) -> ValidationResult:
     _log("2/3", _CYAN, "Validation", "running validators …")
     issues: list[ValidationIssue] = issues_pre
 
-    completeness_issues = check_completeness(enriched)
+    completeness_issues = check_completeness(enriched, skip_category=llm_failed)
     issues.extend(completeness_issues)
     _log("  ·", _DIM, "completeness",
          f"{len(completeness_issues)} issue(s)" if completeness_issues else "OK")
+
+    if llm_failed and not enriched.category_l1:
+        # LLM was unavailable so category could not be auto-detected.
+        # Surface one clear issue instead of confusing "Category L1/L2 missing" errors.
+        issues.append(
+            ValidationIssue(
+                issue_id="SVC-001",
+                severity=Severity.HIGH,
+                type=IssueType.CATEGORY_AMBIGUOUS,
+                description=(
+                    "Category could not be auto-detected because the AI service is temporarily "
+                    "unavailable. Please select a category manually from the dropdowns."
+                ),
+                proposed_fix="Select Category L1 and Category L2 from the form dropdowns.",
+                fix_action=FixAction(field="category_l1"),
+            )
+        )
+        _log("  !", _YELLOW, "category skip", "LLM fallback — asking user to select manually")
 
     issues.extend(check_category(enriched, store.category_index))
 

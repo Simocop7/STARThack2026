@@ -282,6 +282,8 @@ async def interpret_request(
         request_text=form_input.request_text,
         quantity=form_input.quantity,
         unit_of_measure=form_input.unit_of_measure,
+        budget_amount=form_input.budget_amount,
+        currency=form_input.currency,
         category_l1=effective_l1,
         category_l2=effective_l2,
         delivery_country=delivery_country,

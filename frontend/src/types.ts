@@ -145,6 +145,8 @@ export interface SubmittedRequest {
   delivery_country: string;
   required_by_date: string;
   preferred_supplier: string;
+  budget_amount?: number | null;
+  currency?: string;
   language: string;
 }
 
@@ -154,6 +156,8 @@ export interface FormData {
   request_text: string;
   quantity: number | null;
   unit_of_measure: string;
+  budget_amount: number | null;
+  currency: string;
   category_l1: string;
   category_l2: string;
   delivery_country: string;
@@ -211,6 +215,8 @@ export interface EnrichedRequest {
   request_text: string;
   quantity: number | null;
   unit_of_measure: string | null;
+  budget_amount: number | null;
+  currency: string;
   category_l1: string | null;
   category_l2: string | null;
   delivery_country: string | null;

@@ -103,6 +103,16 @@ export default function EmployeeReviewStep({
           autoLabel={i.reviewAutoDetected}
         />
         <Row
+          label={i.reviewBudget}
+          value={e.budget_amount ?? null}
+          autoLabel={i.reviewAutoDetected}
+        />
+        <Row
+          label={i.reviewCurrency}
+          value={e.currency ?? null}
+          autoLabel={i.reviewAutoDetected}
+        />
+        <Row
           label={i.reviewDeliveryCountry}
           value={e.delivery_country}
           isAutoDetected={isAuto("delivery_country")}

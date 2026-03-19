@@ -39,6 +39,8 @@ export default function PendingRequestsView({ onProcess, onRefuse, onNewManual }
       request_text: req.request_text,
       quantity: req.quantity,
       unit_of_measure: req.unit_of_measure,
+      budget_amount: req.budget_amount ?? null,
+      currency: req.currency || "EUR",
       category_l1: req.category_l1,
       category_l2: req.category_l2,
       delivery_country: req.delivery_country,
@@ -143,6 +145,14 @@ export default function PendingRequestsView({ onProcess, onRefuse, onNewManual }
                     <span>
                       <span className="font-medium text-gray-700">{req.quantity}</span>{" "}
                       {req.unit_of_measure || "units"}
+                    </span>
+                  )}
+                  {req.budget_amount != null && (
+                    <span className="inline-flex items-center gap-1 font-medium text-gray-700">
+                      <svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      {req.budget_amount.toLocaleString()} {req.currency || "EUR"}
                     </span>
                   )}
                   {req.delivery_country && (

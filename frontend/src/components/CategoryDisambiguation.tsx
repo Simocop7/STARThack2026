@@ -15,21 +15,33 @@ function confidenceColor(confidence: number): string {
 
 export default function CategoryDisambiguation({ suggestion, lang, onConfirm }: Props) {
   const i = t(lang);
-  const isAmbiguous = suggestion.confidence >= 0.5 && suggestion.confidence < 0.85;
+  const isOutOfScope = suggestion.confidence === 0 || !suggestion.category_l1 || suggestion.category_l1 === "UNKNOWN";
+  const isAmbiguous = !isOutOfScope && suggestion.confidence >= 0.5 && suggestion.confidence < 0.85;
 
   return (
-    <div className="bg-amber-50 border border-amber-300 rounded-lg p-5 mb-6">
-      <h3 className="text-lg font-semibold text-amber-900 mb-3">
-        {i.categoryDetected}
+    <div className={`border rounded-lg p-5 mb-6 ${isOutOfScope ? "bg-red-50 border-red-300" : "bg-amber-50 border-amber-300"}`}>
+      <h3 className={`text-lg font-semibold mb-3 ${isOutOfScope ? "text-red-900" : "text-amber-900"}`}>
+        {isOutOfScope ? "Category Not Recognized" : i.categoryDetected}
       </h3>
 
-      {isAmbiguous && (
-        <div className="bg-yellow-100 border border-yellow-300 rounded-md px-4 py-3 mb-4 text-sm text-yellow-900">
-          ⚠️ Your request is ambiguous — please reformulate it in a more precise manner so the correct category can be determined with confidence.
+      {isOutOfScope && (
+        <div className="bg-red-100 border border-red-300 rounded-md px-4 py-3 mb-4 text-sm text-red-900">
+          This request does not match any category in the procurement framework (IT, Facilities, Professional Services, Marketing).
+          {suggestion.reasoning && <span> {suggestion.reasoning}</span>}
+          {suggestion.alternatives.length > 0
+            ? " Please select the closest applicable category below, or clarify your request."
+            : " Please clarify your request or contact your procurement manager."}
         </div>
       )}
 
-      {/* Primary suggestion */}
+      {isAmbiguous && (
+        <div className="bg-yellow-100 border border-yellow-300 rounded-md px-4 py-3 mb-4 text-sm text-yellow-900">
+          Your request is ambiguous — please reformulate it in a more precise manner so the correct category can be determined with confidence.
+        </div>
+      )}
+
+      {/* Primary suggestion — hide if out of scope with no valid category */}
+      {!isOutOfScope && (
       <div className="bg-white border border-amber-200 rounded-lg p-4 mb-4">
         <div className="flex items-center justify-between mb-2">
           <span className="font-medium text-gray-900">
@@ -52,6 +64,7 @@ export default function CategoryDisambiguation({ suggestion, lang, onConfirm }: 
           {i.categoryConfirm}
         </button>
       </div>
+      )}
 
       {/* Alternatives */}
       {suggestion.alternatives.length > 0 && (

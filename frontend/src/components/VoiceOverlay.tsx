@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { VoicePoweredOrb } from "./ui/voice-powered-orb";
 
 type OverlayPhase = "listening" | "processing" | "speaking" | "closing";
@@ -9,7 +9,6 @@ interface Props {
   volumeLevel: number;
   interimTranscript: string;
   onClose: () => void;
-  /** Stop listening and submit whatever was captured so far */
   onStopListening?: () => void;
 }
 
@@ -22,30 +21,44 @@ export default function VoiceOverlay({
   onStopListening,
 }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const orbDivRef = useRef<HTMLDivElement>(null);
+  const orbBtnRef = useRef<HTMLButtonElement>(null);
 
-  const orbExternalVolume = useMemo(() => {
-    if (phase !== "listening") return 0;
-    return Math.max(0, Math.min(1, volumeLevel));
-  }, [phase, volumeLevel]);
-
-  // Handle closing animation
+  // Closing animation
   useEffect(() => {
     if (phase === "closing" && overlayRef.current) {
-      const el = overlayRef.current;
-      el.style.animation = "overlayFadeOut 400ms ease-out forwards";
+      overlayRef.current.style.animation = "overlayFadeOut 400ms ease-out forwards";
     }
   }, [phase]);
+
+  // Drive --volume CSS custom property for the glow effect
+  useEffect(() => {
+    const el = orbBtnRef.current ?? orbDivRef.current;
+    if (el) el.style.setProperty("--volume", String(volumeLevel));
+  }, [volumeLevel]);
 
   if (!active) return null;
 
   const statusText =
-    phase === "listening"
-      ? "Listening..."
-      : phase === "processing"
-        ? "Processing your request..."
-        : phase === "speaking"
-          ? "Silvio is speaking..."
-          : "";
+    phase === "listening" ? "Listening..."
+    : phase === "processing" ? "Processing your request..."
+    : phase === "speaking" ? "Silvio is speaking..."
+    : "";
+
+  const orbClass =
+    phase === "listening" ? "voice-orb-listening"
+    : phase === "processing" ? "voice-orb-processing"
+    : phase === "speaking" ? "voice-orb-speaking"
+    : "";
+
+  const OrbInner = (
+    <VoicePoweredOrb
+      enableVoiceControl={phase === "listening"}
+      externalVolumeLevel={phase === "listening" ? Math.max(0, Math.min(1, volumeLevel)) : 0}
+      hue={0}
+      className="w-full h-full"
+    />
+  );
 
   return (
     <div
@@ -69,84 +82,77 @@ export default function VoiceOverlay({
 
       {/* Center content */}
       <div className="relative z-10 flex flex-col items-center gap-8">
-        {/* Ambient pulse rings (listening only) */}
+
+        {/* Listening: expanding pulse rings */}
         {phase === "listening" && (
           <>
-            <div
-              className="absolute rounded-full border border-red-400/20"
-              style={{
-                width: 280,
-                height: 280,
-                animation: "ringPulse 2s ease-out infinite",
-              }}
-            />
-            <div
-              className="absolute rounded-full border border-red-300/15"
-              style={{
-                width: 280,
-                height: 280,
-                animation: "ringPulse 2s ease-out infinite 0.7s",
-              }}
-            />
-            <div
-              className="absolute rounded-full border border-rose-300/10"
-              style={{
-                width: 280,
-                height: 280,
-                animation: "ringPulse 2s ease-out infinite 1.4s",
-              }}
-            />
+            <div className="absolute rounded-full border border-red-400/25" style={{ width: 300, height: 300, animation: "ringPulse 2s ease-out infinite" }} />
+            <div className="absolute rounded-full border border-red-400/15" style={{ width: 300, height: 300, animation: "ringPulse 2s ease-out infinite 0.7s" }} />
+            <div className="absolute rounded-full border border-red-300/10" style={{ width: 300, height: 300, animation: "ringPulse 2s ease-out infinite 1.4s" }} />
           </>
         )}
 
-        {/* Processing ring */}
+        {/* Processing: spinning arc */}
         {phase === "processing" && (
-          <div
-            className="absolute rounded-full"
-            style={{
-              width: 270,
-              height: 270,
-              border: "3px solid transparent",
-              borderTopColor: "rgba(239, 68, 68, 0.85)",
-              borderRightColor: "rgba(220, 38, 38, 0.4)",
-              animation: "processingRing 1.2s linear infinite",
-            }}
-          />
+          <>
+            <div className="absolute rounded-full" style={{ width: 272, height: 272, border: "2px solid transparent", borderTopColor: "rgba(239,68,68,0.9)", borderRightColor: "rgba(220,38,38,0.3)", animation: "processingRing 1s linear infinite" }} />
+            <div className="absolute rounded-full" style={{ width: 288, height: 288, border: "1px solid transparent", borderTopColor: "rgba(244,63,94,0.4)", animation: "processingRing 1.8s linear infinite reverse" }} />
+          </>
         )}
 
-        {/* The Orb — clickable during listening to stop */}
+        {/* Speaking: concentric breathe rings */}
+        {phase === "speaking" && (
+          <>
+            <div className="absolute rounded-full border border-rose-400/30" style={{ width: 280, height: 280, animation: "ringPulse 1.4s ease-out infinite" }} />
+            <div className="absolute rounded-full border border-red-300/20" style={{ width: 280, height: 280, animation: "ringPulse 1.4s ease-out infinite 0.5s" }} />
+            <div className="absolute rounded-full border border-orange-300/15" style={{ width: 280, height: 280, animation: "ringPulse 1.4s ease-out infinite 0.9s" }} />
+          </>
+        )}
+
+        {/* Orb wrapper — carries phase class for CSS-driven glow/scale */}
         {phase === "listening" && onStopListening ? (
           <button
+            ref={orbBtnRef}
             type="button"
             onClick={onStopListening}
-            className="w-60 h-60 rounded-full overflow-hidden cursor-pointer border-0 outline-none bg-transparent p-0"
             title="Tap to finish"
+            className={`w-60 h-60 rounded-full overflow-hidden cursor-pointer border-0 outline-none bg-black p-0 ${orbClass}`}
+            style={{ "--volume": "0" } as React.CSSProperties}
           >
-            <VoicePoweredOrb
-              enableVoiceControl
-              externalVolumeLevel={orbExternalVolume}
-              hue={0}
-              className="w-full h-full"
-            />
+            {OrbInner}
           </button>
         ) : (
-          <div className="w-60 h-60 rounded-full overflow-hidden bg-transparent">
-            <VoicePoweredOrb
-              enableVoiceControl={phase === "listening"}
-              externalVolumeLevel={orbExternalVolume}
-              hue={0}
-              className="w-full h-full"
-            />
+          <div
+            ref={orbDivRef}
+            className={`w-60 h-60 rounded-full overflow-hidden bg-black ${orbClass}`}
+            style={{ "--volume": "0" } as React.CSSProperties}
+          >
+            {OrbInner}
           </div>
         )}
 
-        {/* Status label */}
+        {/* Status */}
         <div className="flex flex-col items-center gap-3">
-          <p className="text-lg font-medium text-white/90 tracking-wide">
+          <p
+            key={phase}
+            className="text-lg font-medium text-white/90 tracking-wide"
+            style={{ animation: "transcriptIn 300ms ease-out" }}
+          >
             {statusText}
           </p>
 
-          {/* Interim transcript */}
+          {phase === "processing" && (
+            <div className="flex gap-1.5 items-center">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="w-1.5 h-1.5 rounded-full bg-red-400"
+                  style={{ animation: `bounceDot 1.2s ease-in-out infinite ${i * 0.2}s` }}
+                />
+              ))}
+            </div>
+          )}
+
           {phase !== "closing" && interimTranscript && (
             <p
               className="text-sm text-white/50 max-w-md text-center italic"
@@ -158,7 +164,7 @@ export default function VoiceOverlay({
         </div>
       </div>
 
-      {/* Stop / Done button */}
+      {/* Done button (listening only) */}
       {phase === "listening" && onStopListening && (
         <button
           type="button"
@@ -173,7 +179,6 @@ export default function VoiceOverlay({
         </button>
       )}
 
-      {/* Bottom hint */}
       {phase === "listening" && (
         <p className="absolute bottom-8 text-sm text-white/30">
           Speak, then tap the orb or press Done when finished

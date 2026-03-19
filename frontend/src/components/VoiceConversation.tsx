@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
+import { voiceLog } from "../lib/voiceLogger";
 
 type ConversationPhase = "idle" | "speaking" | "listening" | "processing";
 
@@ -41,6 +42,7 @@ export default function VoiceConversation({
   // Sync phase with external overrides (listening, processing)
   useEffect(() => {
     if (externalPhase && externalPhase !== "speaking") {
+      voiceLog("phase", `external phase → ${externalPhase}`);
       setPhase(externalPhase);
     }
   }, [externalPhase]);
@@ -54,6 +56,7 @@ export default function VoiceConversation({
     async function playTTS() {
       setPhase("speaking");
       setError(null);
+      voiceLog("tts", "fetch started", `lang=${language} text="${(textToSpeak ?? "").slice(0, 80)}"`);
 
       try {
         const res = await fetch("/api/tts", {
@@ -63,7 +66,7 @@ export default function VoiceConversation({
         });
 
         if (!res.ok) {
-          // TTS unavailable — fall back silently
+          voiceLog("tts", `fetch failed — status ${res.status}`, "falling back silently");
           if (!cancelled) {
             setPhase("idle");
             onPlaybackEnd();
@@ -71,8 +74,12 @@ export default function VoiceConversation({
           return;
         }
 
+        voiceLog("tts", "fetch OK — decoding blob");
         const blob = await res.blob();
-        if (cancelled) return;
+        if (cancelled) {
+          voiceLog("tts", "cancelled after blob decode — discarding");
+          return;
+        }
 
         // Clean up previous blob URL
         if (blobUrlRef.current) {
@@ -87,6 +94,7 @@ export default function VoiceConversation({
 
         audio.onended = () => {
           if (!cancelled) {
+            voiceLog("tts", "audio playback ended");
             setPhase("idle");
             onPlaybackEnd();
           }
@@ -94,6 +102,7 @@ export default function VoiceConversation({
 
         audio.onerror = () => {
           if (!cancelled) {
+            voiceLog("tts", "audio playback error");
             setError("Audio playback failed");
             setPhase("idle");
             onPlaybackEnd();
@@ -101,8 +110,12 @@ export default function VoiceConversation({
         };
 
         await audio.play();
-        if (!cancelled) onSpeakingStart?.();
-      } catch {
+        if (!cancelled) {
+          voiceLog("tts", "audio playing");
+          onSpeakingStart?.();
+        }
+      } catch (err) {
+        voiceLog("tts", "fetch threw exception", String(err));
         if (!cancelled) {
           setPhase("idle");
           onPlaybackEnd();

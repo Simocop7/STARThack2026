@@ -149,10 +149,10 @@ export const VoicePoweredOrb: FC<VoicePoweredOrbProps> = ({
       return vec4(colorIn.rgb / (a + 1e-5), a);
     }
 
-    // Red-toned shader base colors (matches your black/red/white palette).
-    const vec3 baseColor1 = vec3(0.98, 0.26, 0.31);
-    const vec3 baseColor2 = vec3(0.86, 0.10, 0.12);
-    const vec3 baseColor3 = vec3(0.35, 0.02, 0.05);
+    // Fire red palette: bright orange-red core, deep crimson mid, near-black ember base.
+    const vec3 baseColor1 = vec3(1.0, 0.28, 0.05);
+    const vec3 baseColor2 = vec3(0.92, 0.08, 0.02);
+    const vec3 baseColor3 = vec3(0.25, 0.01, 0.01);
 
     const float innerRadius = 0.6;
     const float noiseScale = 0.65;
@@ -325,19 +325,19 @@ export const VoicePoweredOrb: FC<VoicePoweredOrbProps> = ({
 
     try {
       renderer = new Renderer({
-        alpha: true,
-        premultipliedAlpha: false,
+        alpha: false,
         antialias: true,
         dpr: window.devicePixelRatio || 1,
       });
       gl = renderer.gl as any;
 
-      gl.clearColor(0, 0, 0, 0);
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.clearColor(0, 0, 0, 1);
+      gl.disable(gl.BLEND);
 
       while (container.firstChild) container.removeChild(container.firstChild);
-      container.appendChild(gl.canvas as unknown as HTMLCanvasElement);
+      const canvasEl = gl.canvas as HTMLCanvasElement;
+      canvasEl.style.cssText = "display:block;width:100%;height:100%;";
+      container.appendChild(canvasEl);
 
       const geometry = new Triangle(gl as any);
       program = new Program(gl as any, {
@@ -365,18 +365,20 @@ export const VoicePoweredOrb: FC<VoicePoweredOrbProps> = ({
         if (width === 0 || height === 0) return;
 
         renderer.setSize(width * dpr, height * dpr);
-        const canvasEl = gl.canvas as HTMLCanvasElement;
-        canvasEl.style.width = width + "px";
-        canvasEl.style.height = height + "px";
+        const cvs = gl.canvas as HTMLCanvasElement;
+        cvs.style.width = width + "px";
+        cvs.style.height = height + "px";
         program.uniforms.iResolution.value.set(
-          canvasEl.width,
-          canvasEl.height,
-          canvasEl.width / canvasEl.height,
+          cvs.width,
+          cvs.height,
+          cvs.width / cvs.height,
         );
       };
 
       window.addEventListener("resize", resize);
+      // Call resize both immediately and after layout settles (overlay animation)
       resize();
+      requestAnimationFrame(() => requestAnimationFrame(resize));
 
       const baseRotationSpeed = 0.3;
 
@@ -460,7 +462,8 @@ export const VoicePoweredOrb: FC<VoicePoweredOrbProps> = ({
       if (container.firstChild) container.removeChild(container.firstChild);
       return () => {};
     }
-  }, [ctnDom, enableVoiceControl, frag, hue, initMicrophone, maxHoverIntensity, maxRotationSpeed, stopMicrophone, useExternalLevel, vert, voiceSensitivity]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div ref={ctnDom} className={cn("w-full h-full relative", className)} />
