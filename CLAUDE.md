@@ -1,5 +1,11 @@
 # ChainIQ START Hack 2026 — Audit-Ready Autonomous Sourcing Agent
 
+## Dev Environment
+
+- **Always use the project venv** for running Python: `.venv/bin/python` (path: `/Users/glaucorampone/Desktop/StartHack+/code/Repo/STARThack2026/.venv/bin/python`)
+- Install packages with `.venv/bin/pip install`
+- Never use system Python
+
 ## Challenge Overview
 
 Build a **working prototype** that converts **unstructured purchase requests** into **structured, defensible supplier comparisons** with transparent reasoning and escalation logic.

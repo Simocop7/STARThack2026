@@ -111,27 +111,35 @@ export default function App() {
   async function fetchRanking(enriched: Record<string, unknown>) {
     setRankingLoading(true);
     try {
-      // Map enriched_request fields → CleanOrderRecap
-      const deliveryCountries = enriched.delivery_countries as string[] | undefined;
+      // Map EnrichedRequest fields → CleanOrderRecap
+      // EnrichedRequest has: delivery_country (singular), category_suggestion for categories,
+      // preferred_supplier_id/preferred_supplier_name for supplier info.
       const deliveryCountry =
-        Array.isArray(deliveryCountries) && deliveryCountries.length > 0
-          ? deliveryCountries[0]
-          : (enriched.country as string) ?? "DE";
+        (enriched.delivery_country as string) ?? "DE";
+
+      // Category: use direct fields first, fall back to category_suggestion
+      const catSuggestion = enriched.category_suggestion as
+        | { category_l1?: string; category_l2?: string }
+        | undefined;
+      const categoryL1 =
+        (enriched.category_l1 as string) || catSuggestion?.category_l1 || "";
+      const categoryL2 =
+        (enriched.category_l2 as string) || catSuggestion?.category_l2 || "";
 
       const order = {
-        request_id: (enriched.request_id as string) ?? "REQ-UNKNOWN",
-        category_l1: enriched.category_l1 as string,
-        category_l2: enriched.category_l2 as string,
+        request_id: "REQ-VOICE",
+        category_l1: categoryL1,
+        category_l2: categoryL2,
         quantity: (enriched.quantity as number) ?? 1,
         unit_of_measure: (enriched.unit_of_measure as string) ?? "unit",
-        budget_amount: (enriched.budget_amount as number) ?? null,
-        currency: (enriched.currency as string) ?? "EUR",
+        budget_amount: null,
+        currency: "EUR",
         delivery_country: deliveryCountry,
         required_by_date: (enriched.required_by_date as string) ?? null,
-        data_residency_required: (enriched.data_residency_constraint as boolean) ?? false,
+        data_residency_required: (enriched.data_residency_required as boolean) ?? false,
         esg_requirement: (enriched.esg_requirement as boolean) ?? false,
-        preferred_supplier_id: null,
-        preferred_supplier_name: (enriched.preferred_supplier_mentioned as string) ?? null,
+        preferred_supplier_id: (enriched.preferred_supplier_id as string) ?? null,
+        preferred_supplier_name: (enriched.preferred_supplier_name as string) ?? null,
       };
 
       const res = await fetch("/api/rank", {

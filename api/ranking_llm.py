@@ -12,22 +12,17 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
-
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import PromptTemplate
-from langchain_openai import ChatOpenAI
+from langchain_openai import AzureChatOpenAI
 from pydantic import BaseModel, Field
 
 from api.ranking_models import (
     CleanOrderRecap,
-    ComplianceCheck,
     Escalation,
     RankedSupplierOutput,
     RankingMethod,
-    ScoreBreakdown,
     ScoredSupplier,
-    ScoringWeights,
 )
 
 
@@ -174,9 +169,18 @@ async def rank_suppliers_with_llm(
 
     weights = deterministic_result.scoring_weights
 
-    # Build the LangChain chain
-    llm = ChatOpenAI(
-        model=os.getenv("RANKING_LLM_MODEL", "gpt-4o"),
+    # Build the LangChain chain — route through Azure, not api.openai.com
+    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+    api_key = os.getenv("AZURE_OPENAI_API_KEY")
+    if not endpoint or not api_key:
+        raise ValueError(
+            "Missing required environment variables: AZURE_OPENAI_ENDPOINT and/or AZURE_OPENAI_API_KEY"
+        )
+    llm = AzureChatOpenAI(
+        azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o"),
+        azure_endpoint=endpoint,
+        api_key=api_key,
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2025-01-01-preview"),
         temperature=0.1,
         max_tokens=2000,
     )

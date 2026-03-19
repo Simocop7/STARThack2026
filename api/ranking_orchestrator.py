@@ -81,12 +81,28 @@ async def get_top_5_suppliers(
         )
         return llm_result
 
-    except Exception:
-        # LLM failure is non-fatal — fall back to deterministic result
+    except (Exception) as exc:
+        # LLM failure is non-fatal — fall back to deterministic result.
+        # Narrow to expected failures; re-raise truly unexpected ones.
+        expected = (
+            OSError,          # network / timeout
+            ValueError,       # JSON / parsing
+            KeyError,         # missing fields
+        )
+        if not isinstance(exc, expected):
+            # Also allow pydantic ValidationError and openai errors
+            exc_mod = type(exc).__module__
+            if not any(
+                exc_mod.startswith(pfx)
+                for pfx in ("pydantic", "openai", "langchain")
+            ):
+                raise
+
         logger.exception(
             "LLM fallback failed for %s — returning deterministic result.",
             order.request_id,
         )
-        det_result.llm_fallback_reason = f"LLM invocation failed: {reason}"
-        det_result.method_used = RankingMethod.HYBRID
-        return det_result
+        return det_result.model_copy(update={
+            "llm_fallback_reason": f"LLM invocation failed: {reason}",
+            "method_used": RankingMethod.HYBRID,
+        })

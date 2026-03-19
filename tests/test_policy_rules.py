@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from api.models import EnrichedRequest, IssueType, Severity
+from api.models import EnrichedRequest, Severity
 from api.validators.policy_rules import check_policy_rules
 
 

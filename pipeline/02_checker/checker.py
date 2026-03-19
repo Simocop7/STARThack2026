@@ -20,8 +20,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import itertools
 import json
-import os
 import re
 import threading
 import time
@@ -44,22 +44,18 @@ C: int = 0        # capacity override (0 = use per-category max)
 T: int = 30       # aggregation interval in seconds
 
 # ═══════════════════════════════════════════════════════════════
-# COUNTERS
+# COUNTERS — thread-safe via itertools.count (atomic in CPython)
 # ═══════════════════════════════════════════════════════════════
-_ink_counter = 0
-_req_counter = 0
+_ink_counter = itertools.count(1)
+_req_counter = itertools.count(1)
 
 
 def _next_ink_id() -> str:
-    global _ink_counter
-    _ink_counter += 1
-    return f"INK-{_ink_counter:06d}"
+    return f"INK-{next(_ink_counter):06d}"
 
 
 def _next_req_id() -> str:
-    global _req_counter
-    _req_counter += 1
-    return f"REQ-{_req_counter:06d}"
+    return f"REQ-{next(_req_counter):06d}"
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -312,7 +308,8 @@ def build_aggregated_output(batch: list[dict]) -> dict:
     primary = batch[0]
     intake_ids = [r["intake_id"] for r in batch]
     total_qty = sum(r.get("quantity") or 0 for r in batch)
-    earliest_date = min(r["required_by_date"] for r in batch)
+    valid_dates = [r["required_by_date"] for r in batch if r.get("required_by_date")]
+    earliest_date = min(valid_dates) if valid_dates else None
     combined_text = "\n---\n".join(
         f"[{r['intake_id']}] {r.get('request_text', '')}" for r in batch
     )
@@ -394,6 +391,8 @@ class AggregationBuffer:
     def submit(self, req: dict) -> None:
         """Submit an intake request. Checks thresholds, routes to
         warning (with PDF) or aggregation queue."""
+        # Work on a copy to avoid mutating the caller's dict
+        req = {**req}
         # Ensure intake metadata
         if "intake_id" not in req or not req["intake_id"]:
             req["intake_id"] = _next_ink_id()

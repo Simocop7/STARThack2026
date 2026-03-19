@@ -11,8 +11,7 @@ Every decision is recorded so the output is fully auditable.
 
 from __future__ import annotations
 
-import math
-from datetime import date, timedelta
+from datetime import date
 from typing import Any
 
 from api.data_loader import DataStore
@@ -115,6 +114,17 @@ def _find_pricing_tier(
 # ═══════════════════════════════════════════════════════════════════════
 
 
+# Thresholds keyed by rule_type — single source of truth matching policies.json rule_text.
+# If policies.json ever adds explicit threshold fields, read from there instead.
+_RULE_TYPE_THRESHOLDS: dict[str, float] = {
+    "mandatory_comparison": 100_000,   # CR-001: EUR/CHF 100K
+    "fast_track": 75_000,              # CR-003: EUR/CHF 75K
+    "security_review": 250_000,        # CR-005: EUR/CHF 250K
+    "engineering_spec_review": 50,     # CR-002: 50 units
+    "cv_review": 60,                   # CR-007: 60 consulting days
+}
+
+
 def _evaluate_category_rules(
     order: CleanOrderRecap,
     total_value: float,
@@ -133,29 +143,30 @@ def _evaluate_category_rules(
         rule_id = rule["rule_id"]
         rule_text = rule["rule_text"]
         rule_type = rule["rule_type"]
+        threshold = _RULE_TYPE_THRESHOLDS.get(rule_type)
 
-        if rule_type == "mandatory_comparison" and total_value > 100_000:
+        if rule_type == "mandatory_comparison" and threshold is not None and total_value > threshold:
             checks.append(ComplianceCheck(
                 rule_id=rule_id, rule_description=rule_text,
                 result="warning",
-                detail=f"Total value {order.currency} {total_value:,.0f} > 100K — at least 3 supplier quotes mandatory.",
+                detail=f"Total value {order.currency} {total_value:,.0f} > {threshold:,.0f} — at least 3 supplier quotes mandatory.",
             ))
-        elif rule_type == "engineering_spec_review" and order.quantity > 50:
+        elif rule_type == "engineering_spec_review" and threshold is not None and order.quantity > threshold:
             checks.append(ComplianceCheck(
                 rule_id=rule_id, rule_description=rule_text,
                 result="warning",
-                detail=f"Quantity {order.quantity} > 50 — engineering/CAD review required.",
+                detail=f"Quantity {order.quantity} > {int(threshold)} — engineering/CAD review required.",
             ))
             escalations.append(Escalation(
                 rule_id=rule_id, trigger="engineering_spec_review",
                 escalate_to="Engineering / CAD Lead", blocking=True,
                 detail=rule_text,
             ))
-        elif rule_type == "fast_track" and total_value < 75_000:
+        elif rule_type == "fast_track" and threshold is not None and total_value < threshold:
             checks.append(ComplianceCheck(
                 rule_id=rule_id, rule_description=rule_text,
                 result="pass",
-                detail=f"Fast-track eligible: value {order.currency} {total_value:,.0f} < 75K.",
+                detail=f"Fast-track eligible: value {order.currency} {total_value:,.0f} < {threshold:,.0f}.",
             ))
         elif rule_type == "residency_check" and order.data_residency_required:
             checks.append(ComplianceCheck(
@@ -163,11 +174,11 @@ def _evaluate_category_rules(
                 result="warning",
                 detail="Data residency required — only residency-compliant suppliers eligible.",
             ))
-        elif rule_type == "security_review" and total_value > 250_000:
+        elif rule_type == "security_review" and threshold is not None and total_value > threshold:
             checks.append(ComplianceCheck(
                 rule_id=rule_id, rule_description=rule_text,
                 result="warning",
-                detail=f"Total value {order.currency} {total_value:,.0f} > 250K — security architecture review required.",
+                detail=f"Total value {order.currency} {total_value:,.0f} > {threshold:,.0f} — security architecture review required.",
             ))
             escalations.append(Escalation(
                 rule_id=rule_id, trigger="security_review",
@@ -180,11 +191,11 @@ def _evaluate_category_rules(
                 result="warning",
                 detail="Design sign-off required before award.",
             ))
-        elif rule_type == "cv_review" and order.quantity > 60:
+        elif rule_type == "cv_review" and threshold is not None and order.quantity > threshold:
             checks.append(ComplianceCheck(
                 rule_id=rule_id, rule_description=rule_text,
                 result="warning",
-                detail=f"Quantity {order.quantity} > 60 consulting days — CV review required.",
+                detail=f"Quantity {order.quantity} > {int(threshold)} consulting days — CV review required.",
             ))
         elif rule_type == "certification_check":
             checks.append(ComplianceCheck(
@@ -294,7 +305,268 @@ def _is_preferred_supplier(
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 6. MAIN DETERMINISTIC RANKING FUNCTION
+# 6a. FILTER — hard-constraint elimination
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _filter_suppliers(
+    order: CleanOrderRecap,
+    region: str,
+    potential_suppliers: list[dict[str, Any]],
+    pricing_index: dict,
+    policies: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[ExcludedSupplier]]:
+    """Apply hard filters and return (eligible, excluded) lists."""
+    eligible: list[dict[str, Any]] = []
+    excluded: list[ExcludedSupplier] = []
+
+    for sup in potential_suppliers:
+        sid = sup["supplier_id"]
+        sname = sup["supplier_name"]
+
+        if sup.get("contract_status") != "active":
+            excluded.append(ExcludedSupplier(
+                supplier_id=sid, supplier_name=sname,
+                reason=f"Contract status: {sup.get('contract_status', 'unknown')}",
+            ))
+            continue
+
+        if order.delivery_country not in sup["service_regions"]:
+            excluded.append(ExcludedSupplier(
+                supplier_id=sid, supplier_name=sname,
+                reason=f"Does not service delivery country {order.delivery_country}. "
+                       f"Covers: {', '.join(sup['service_regions'])}.",
+            ))
+            continue
+
+        if order.data_residency_required and not sup.get("data_residency_supported", False):
+            excluded.append(ExcludedSupplier(
+                supplier_id=sid, supplier_name=sname,
+                reason="Data residency required but supplier does not support it.",
+            ))
+            continue
+
+        if sup["capacity_per_month"] and order.quantity > sup["capacity_per_month"]:
+            excluded.append(ExcludedSupplier(
+                supplier_id=sid, supplier_name=sname,
+                reason=(
+                    f"Requested quantity ({order.quantity}) exceeds monthly capacity "
+                    f"({sup['capacity_per_month']})."
+                ),
+            ))
+            continue
+
+        tier = _find_pricing_tier(
+            sid, order.category_l1, order.category_l2, region, order.quantity, pricing_index,
+        )
+        if tier is None:
+            excluded.append(ExcludedSupplier(
+                supplier_id=sid, supplier_name=sname,
+                reason=f"No active pricing tier for region '{region}' and quantity {order.quantity}.",
+            ))
+            continue
+
+        total_estimate = tier["unit_price"] * order.quantity
+        restricted, restriction_reason = _check_restriction(
+            sid, order.category_l1, order.category_l2,
+            order.delivery_country, total_estimate, order.currency, policies,
+        )
+        if restricted:
+            excluded.append(ExcludedSupplier(
+                supplier_id=sid, supplier_name=sname,
+                reason=f"Restricted: {restriction_reason}",
+            ))
+            continue
+
+        eligible.append({**sup, "_tier": tier, "_total": total_estimate})
+
+    return eligible, excluded
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 6b. SCORE — weighted composite scoring
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _score_suppliers(
+    eligible: list[dict[str, Any]],
+    order: CleanOrderRecap,
+    weights: ScoringWeights,
+    days_until_required: int | None,
+    policies: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Normalise dimensions and compute composite scores."""
+    prices = [c["_total"] for c in eligible]
+    min_price, max_price = min(prices), max(prices)
+    price_range = max_price - min_price if max_price != min_price else 1.0
+
+    quality_scores = [c["quality_score"] for c in eligible]
+    min_q, max_q = min(quality_scores), max(quality_scores)
+    q_range = max_q - min_q if max_q != min_q else 1.0
+
+    risk_scores = [c["risk_score"] for c in eligible]
+    min_r, max_r = min(risk_scores), max(risk_scores)
+    r_range = max_r - min_r if max_r != min_r else 1.0
+
+    esg_scores = [c["esg_score"] for c in eligible]
+    min_e, max_e = min(esg_scores), max(esg_scores)
+    e_range = max_e - min_e if max_e != min_e else 1.0
+
+    scored: list[dict[str, Any]] = []
+
+    for c in eligible:
+        tier = c["_tier"]
+        total = c["_total"]
+
+        price_norm = 1.0 - ((total - min_price) / price_range) if price_range > 0 else 1.0
+        quality_norm = (c["quality_score"] - min_q) / q_range if q_range > 0 else 1.0
+        risk_norm = 1.0 - ((c["risk_score"] - min_r) / r_range) if r_range > 0 else 1.0
+        esg_norm = (c["esg_score"] - min_e) / e_range if e_range > 0 else 1.0
+
+        std_lt = tier["standard_lead_time_days"]
+        exp_lt = tier["expedited_lead_time_days"]
+        meets_standard = std_lt <= days_until_required if days_until_required is not None else True
+        meets_expedited = exp_lt <= days_until_required if days_until_required is not None else True
+
+        if meets_standard:
+            lt_score = 1.0
+        elif meets_expedited:
+            lt_score = 0.5
+        else:
+            lt_score = 0.0
+
+        composite = (
+            weights.price * price_norm
+            + weights.quality * quality_norm
+            + weights.risk * risk_norm
+            + weights.esg * esg_norm
+            + weights.lead_time * lt_score
+        )
+
+        is_preferred = _is_preferred_supplier(
+            c["supplier_id"], order.category_l1, order.category_l2,
+            order.delivery_country, policies,
+        )
+
+        scored.append({
+            "supplier": c,
+            "tier": tier,
+            "total": total,
+            "price_norm": price_norm,
+            "quality_norm": quality_norm,
+            "risk_norm": risk_norm,
+            "esg_norm": esg_norm,
+            "lt_score": lt_score,
+            "composite": composite,
+            "is_preferred": is_preferred,
+            "meets_lead_time": meets_standard or meets_expedited,
+            "meets_standard": meets_standard,
+        })
+
+    scored.sort(key=lambda x: (-x["composite"], -x["is_preferred"], x["total"]))
+    return scored
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 6c. BUILD — construct a ScoredSupplier entry for the output
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _build_scored_supplier(
+    rank: int,
+    s: dict[str, Any],
+    order: CleanOrderRecap,
+    cat_checks: list[ComplianceCheck],
+    geo_checks: list[ComplianceCheck],
+) -> ScoredSupplier:
+    """Build a single ScoredSupplier entry from a scored candidate dict."""
+    sup = s["supplier"]
+    tier = s["tier"]
+
+    is_order_preferred = (
+        order.preferred_supplier_id is not None
+        and sup["supplier_id"] == order.preferred_supplier_id
+    )
+
+    supplier_checks = list(cat_checks) + list(geo_checks)
+    supplier_checks.append(ComplianceCheck(
+        rule_id="RESTRICTION_CHECK",
+        rule_description="Policy restriction verification",
+        result="pass",
+        detail=f"{sup['supplier_name']} is not restricted for "
+               f"{order.category_l1}/{order.category_l2} in {order.delivery_country}.",
+    ))
+    if sup.get("data_residency_supported"):
+        supplier_checks.append(ComplianceCheck(
+            rule_id="DATA_RESIDENCY",
+            rule_description="Data residency support",
+            result="pass",
+            detail="Supplier supports data residency.",
+        ))
+    elif order.data_residency_required:
+        supplier_checks.append(ComplianceCheck(
+            rule_id="DATA_RESIDENCY",
+            rule_description="Data residency support",
+            result="fail",
+            detail="Supplier does not support data residency (should have been filtered).",
+        ))
+
+    rationale_parts = [
+        f"Rank #{rank} with composite score {s['composite']:.3f}.",
+        (
+            f"Pricing tier: {tier['min_quantity']}-{tier['max_quantity']} units "
+            f"at {order.currency} {tier['unit_price']:,.2f}/unit "
+            f"(total {order.currency} {s['total']:,.2f})."
+        ),
+    ]
+    if s["is_preferred"]:
+        rationale_parts.append("Preferred supplier for this category/region.")
+    if is_order_preferred:
+        rationale_parts.append("Matches requester's stated supplier preference.")
+    if not s["meets_lead_time"]:
+        rationale_parts.append(
+            f"WARNING: Neither standard ({tier['standard_lead_time_days']}d) nor "
+            f"expedited ({tier['expedited_lead_time_days']}d) lead time meets deadline."
+        )
+    elif not s["meets_standard"]:
+        rationale_parts.append(
+            f"Requires expedited delivery ({tier['expedited_lead_time_days']}d) "
+            f"at {order.currency} {tier['expedited_unit_price']:,.2f}/unit."
+        )
+    rationale_parts.append(
+        f"Quality: {sup['quality_score']}, Risk: {sup['risk_score']}, "
+        f"ESG: {sup['esg_score']}."
+    )
+
+    return ScoredSupplier(
+        rank=rank,
+        supplier_id=sup["supplier_id"],
+        supplier_name=sup["supplier_name"],
+        is_preferred=s["is_preferred"],
+        is_incumbent=is_order_preferred,
+        meets_lead_time=s["meets_lead_time"],
+        pricing_tier_applied=f"{tier['min_quantity']}-{tier['max_quantity']} units",
+        unit_price=tier["unit_price"],
+        total_price=s["total"],
+        expedited_unit_price=tier["expedited_unit_price"],
+        expedited_total_price=tier["expedited_unit_price"] * order.quantity,
+        standard_lead_time_days=tier["standard_lead_time_days"],
+        expedited_lead_time_days=tier["expedited_lead_time_days"],
+        score_breakdown=ScoreBreakdown(
+            price_score=round(s["price_norm"], 4),
+            quality_score=round(s["quality_norm"], 4),
+            risk_score=round(s["risk_norm"], 4),
+            esg_score=round(s["esg_norm"], 4),
+            lead_time_score=round(s["lt_score"], 4),
+        ),
+        composite_score=round(s["composite"], 4),
+        compliance_checks=supplier_checks,
+        recommendation_note=" ".join(rationale_parts),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 6d. MAIN DETERMINISTIC RANKING FUNCTION
 # ═══════════════════════════════════════════════════════════════════════
 
 
@@ -335,77 +607,11 @@ def rank_suppliers_deterministically(
     candidates_key = (order.category_l1, order.category_l2)
     potential_suppliers = store.suppliers_by_category.get(candidates_key, [])
 
-    eligible: list[dict[str, Any]] = []
-    excluded: list[ExcludedSupplier] = []
+    eligible, excluded = _filter_suppliers(
+        order, region, potential_suppliers, pricing_index, policies,
+    )
 
-    for sup in potential_suppliers:
-        sid = sup["supplier_id"]
-        sname = sup["supplier_name"]
-
-        # 1a. Contract status
-        if sup.get("contract_status") != "active":
-            excluded.append(ExcludedSupplier(
-                supplier_id=sid, supplier_name=sname,
-                reason=f"Contract status: {sup.get('contract_status', 'unknown')}",
-            ))
-            continue
-
-        # 1b. Geographic coverage — check if delivery country is in service_regions
-        if order.delivery_country not in sup["service_regions"]:
-            excluded.append(ExcludedSupplier(
-                supplier_id=sid, supplier_name=sname,
-                reason=f"Does not service delivery country {order.delivery_country}. "
-                       f"Covers: {', '.join(sup['service_regions'])}.",
-            ))
-            continue
-
-        # 1c. Data residency
-        if order.data_residency_required and not sup.get("data_residency_supported", False):
-            excluded.append(ExcludedSupplier(
-                supplier_id=sid, supplier_name=sname,
-                reason="Data residency required but supplier does not support it.",
-            ))
-            continue
-
-        # 1d. Capacity
-        if sup["capacity_per_month"] and order.quantity > sup["capacity_per_month"]:
-            excluded.append(ExcludedSupplier(
-                supplier_id=sid, supplier_name=sname,
-                reason=(
-                    f"Requested quantity ({order.quantity}) exceeds monthly capacity "
-                    f"({sup['capacity_per_month']})."
-                ),
-            ))
-            continue
-
-        # 1e. Pricing availability
-        tier = _find_pricing_tier(
-            sid, order.category_l1, order.category_l2, region, order.quantity, pricing_index,
-        )
-        if tier is None:
-            excluded.append(ExcludedSupplier(
-                supplier_id=sid, supplier_name=sname,
-                reason=f"No active pricing tier for region '{region}' and quantity {order.quantity}.",
-            ))
-            continue
-
-        # 1f. Policy restriction check (authoritative — overrides is_restricted flag)
-        total_estimate = tier["unit_price"] * order.quantity
-        restricted, restriction_reason = _check_restriction(
-            sid, order.category_l1, order.category_l2,
-            order.delivery_country, total_estimate, order.currency, policies,
-        )
-        if restricted:
-            excluded.append(ExcludedSupplier(
-                supplier_id=sid, supplier_name=sname,
-                reason=f"Restricted: {restriction_reason}",
-            ))
-            continue
-
-        # Passed all hard filters
-        eligible.append({**sup, "_tier": tier, "_total": total_estimate})
-
-    # ── Escalation: ER-001 missing info ─────────────────────────────
+    # ── Escalations from filter results ─────────────────────────────
 
     escalations: list[Escalation] = []
 
@@ -415,8 +621,6 @@ def rank_suppliers_deterministically(
             escalate_to="Requester", blocking=False,
             detail="Budget amount is not specified. Procurement cannot validate cost compliance or approval threshold without a stated budget.",
         ))
-
-    # ── Escalation: ER-006 capacity exceeded ────────────────────────
 
     capacity_exceeded = [
         e for e in excluded
@@ -432,8 +636,6 @@ def rank_suppliers_deterministically(
                 + ". Alternative sourcing or split delivery may be required."
             ),
         ))
-
-    # ── Escalation: no compliant suppliers ──────────────────────────
 
     if not eligible:
         escalations.append(Escalation(
@@ -452,97 +654,17 @@ def rank_suppliers_deterministically(
                               "capacity", "data_residency", "contract_status"],
         )
 
-    # ── Stage 2: Compute raw scores ─────────────────────────────────
+    # ── Stage 2: Score and rank ─────────────────────────────────────
 
-    prices = [c["_total"] for c in eligible]
-    min_price = min(prices)
-    max_price = max(prices)
-    price_range = max_price - min_price if max_price != min_price else 1.0
+    scored = _score_suppliers(eligible, order, weights, days_until_required, policies)
 
-    quality_scores = [c["quality_score"] for c in eligible]
-    min_q, max_q = min(quality_scores), max(quality_scores)
-    q_range = max_q - min_q if max_q != min_q else 1.0
+    # ── Stage 3: Build output ───────────────────────────────────────
 
-    risk_scores = [c["risk_score"] for c in eligible]
-    min_r, max_r = min(risk_scores), max(risk_scores)
-    r_range = max_r - min_r if max_r != min_r else 1.0
-
-    esg_scores = [c["esg_score"] for c in eligible]
-    min_e, max_e = min(esg_scores), max(esg_scores)
-    e_range = max_e - min_e if max_e != min_e else 1.0
-
-    scored: list[dict[str, Any]] = []
-
-    for c in eligible:
-        tier = c["_tier"]
-        total = c["_total"]
-
-        # Normalise price: cheaper is better → invert
-        price_norm = 1.0 - ((total - min_price) / price_range) if price_range > 0 else 1.0
-        quality_norm = (c["quality_score"] - min_q) / q_range if q_range > 0 else 1.0
-        risk_norm = 1.0 - ((c["risk_score"] - min_r) / r_range) if r_range > 0 else 1.0
-        esg_norm = (c["esg_score"] - min_e) / e_range if e_range > 0 else 1.0
-
-        # Lead-time scoring
-        std_lt = tier["standard_lead_time_days"]
-        exp_lt = tier["expedited_lead_time_days"]
-        meets_standard = True
-        meets_expedited = True
-
-        if days_until_required is not None:
-            meets_standard = std_lt <= days_until_required
-            meets_expedited = exp_lt <= days_until_required
-
-        if meets_standard:
-            lt_score = 1.0
-        elif meets_expedited:
-            lt_score = 0.5
-        else:
-            lt_score = 0.0
-
-        composite = (
-            weights.price * price_norm
-            + weights.quality * quality_norm
-            + weights.risk * risk_norm
-            + weights.esg * esg_norm
-            + weights.lead_time * lt_score
-        )
-
-        # Preferred supplier bonus (small tie-breaker, transparent in audit)
-        is_preferred = _is_preferred_supplier(
-            c["supplier_id"], order.category_l1, order.category_l2,
-            order.delivery_country, policies,
-        )
-
-        scored.append({
-            "supplier": c,
-            "tier": tier,
-            "total": total,
-            "price_norm": price_norm,
-            "quality_norm": quality_norm,
-            "risk_norm": risk_norm,
-            "esg_norm": esg_norm,
-            "lt_score": lt_score,
-            "composite": composite,
-            "is_preferred": is_preferred,
-            "meets_lead_time": meets_standard or meets_expedited,
-            "meets_standard": meets_standard,
-        })
-
-    # ── Stage 3: Sort and assign ranks ──────────────────────────────
-
-    scored.sort(key=lambda x: (-x["composite"], -x["is_preferred"], x["total"]))
-
-    # ── Stage 4: Build output ───────────────────────────────────────
-
-    # Category and geography compliance checks (shared across all suppliers)
-    # Use cheapest supplier's total for threshold-based rules
     cheapest_total = scored[0]["total"] if scored else 0
     cat_checks, cat_escalations = _evaluate_category_rules(order, cheapest_total, policies)
     geo_checks = _evaluate_geography_rules(order, policies)
     escalations.extend(cat_escalations)
 
-    # Approval threshold
     threshold = _find_approval_threshold(cheapest_total, order.currency, policies)
     approval_note = None
     quotes_required = None
@@ -559,7 +681,6 @@ def rank_suppliers_deterministically(
         if deviation:
             approval_note += f" Deviation approval from: {', '.join(deviation)}."
 
-    # Check if preferred supplier was excluded (escalation ER-002)
     if order.preferred_supplier_id:
         pref_excluded = any(
             e.supplier_id == order.preferred_supplier_id for e in excluded
@@ -571,7 +692,6 @@ def rank_suppliers_deterministically(
                 detail=f"Preferred supplier {order.preferred_supplier_id} was excluded from ranking.",
             ))
 
-    # Budget check
     budget_sufficient = None
     if order.budget_amount is not None and scored:
         cheapest = min(s["total"] for s in scored)
@@ -586,98 +706,10 @@ def rank_suppliers_deterministically(
                 ),
             ))
 
-    # Build ranked supplier entries
-    ranking: list[ScoredSupplier] = []
-    for i, s in enumerate(scored[:5], start=1):
-        sup = s["supplier"]
-        tier = s["tier"]
-
-        # Determine if this supplier is the preferred one stated in the order
-        is_order_preferred = (
-            order.preferred_supplier_id is not None
-            and sup["supplier_id"] == order.preferred_supplier_id
-        )
-
-        # Compliance checks per supplier
-        supplier_checks = list(cat_checks) + list(geo_checks)
-        supplier_checks.append(ComplianceCheck(
-            rule_id="RESTRICTION_CHECK",
-            rule_description="Policy restriction verification",
-            result="pass",
-            detail=f"{sup['supplier_name']} is not restricted for "
-                   f"{order.category_l1}/{order.category_l2} in {order.delivery_country}.",
-        ))
-        if sup.get("data_residency_supported"):
-            supplier_checks.append(ComplianceCheck(
-                rule_id="DATA_RESIDENCY",
-                rule_description="Data residency support",
-                result="pass",
-                detail="Supplier supports data residency.",
-            ))
-        elif order.data_residency_required:
-            supplier_checks.append(ComplianceCheck(
-                rule_id="DATA_RESIDENCY",
-                rule_description="Data residency support",
-                result="fail",
-                detail="Supplier does not support data residency (should have been filtered).",
-            ))
-
-        # Build audit rationale
-        rationale_parts = []
-        rationale_parts.append(
-            f"Rank #{i} with composite score {s['composite']:.3f}."
-        )
-        rationale_parts.append(
-            f"Pricing tier: {tier['min_quantity']}-{tier['max_quantity']} units "
-            f"at {order.currency} {tier['unit_price']:,.2f}/unit "
-            f"(total {order.currency} {s['total']:,.2f})."
-        )
-        if s["is_preferred"]:
-            rationale_parts.append("Preferred supplier for this category/region.")
-        if is_order_preferred:
-            rationale_parts.append("Matches requester's stated supplier preference.")
-        if not s["meets_lead_time"]:
-            rationale_parts.append(
-                f"WARNING: Neither standard ({tier['standard_lead_time_days']}d) nor "
-                f"expedited ({tier['expedited_lead_time_days']}d) lead time meets deadline."
-            )
-        elif not s["meets_standard"]:
-            rationale_parts.append(
-                f"Requires expedited delivery ({tier['expedited_lead_time_days']}d) "
-                f"at {order.currency} {tier['expedited_unit_price']:,.2f}/unit."
-            )
-        rationale_parts.append(
-            f"Quality: {sup['quality_score']}, Risk: {sup['risk_score']}, "
-            f"ESG: {sup['esg_score']}."
-        )
-
-        exp_total = tier["expedited_unit_price"] * order.quantity
-
-        ranking.append(ScoredSupplier(
-            rank=i,
-            supplier_id=sup["supplier_id"],
-            supplier_name=sup["supplier_name"],
-            is_preferred=s["is_preferred"],
-            is_incumbent=is_order_preferred,
-            meets_lead_time=s["meets_lead_time"],
-            pricing_tier_applied=f"{tier['min_quantity']}-{tier['max_quantity']} units",
-            unit_price=tier["unit_price"],
-            total_price=s["total"],
-            expedited_unit_price=tier["expedited_unit_price"],
-            expedited_total_price=exp_total,
-            standard_lead_time_days=tier["standard_lead_time_days"],
-            expedited_lead_time_days=tier["expedited_lead_time_days"],
-            score_breakdown=ScoreBreakdown(
-                price_score=round(s["price_norm"], 4),
-                quality_score=round(s["quality_norm"], 4),
-                risk_score=round(s["risk_norm"], 4),
-                esg_score=round(s["esg_norm"], 4),
-                lead_time_score=round(s["lt_score"], 4),
-            ),
-            composite_score=round(s["composite"], 4),
-            compliance_checks=supplier_checks,
-            recommendation_note=" ".join(rationale_parts),
-        ))
+    ranking = [
+        _build_scored_supplier(i, s, order, cat_checks, geo_checks)
+        for i, s in enumerate(scored[:5], start=1)
+    ]
 
     min_cost_supplier = scored[0]["supplier"]["supplier_name"] if scored else None
     min_cost = scored[0]["total"] if scored else None

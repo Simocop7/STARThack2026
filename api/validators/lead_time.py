@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from typing import Any
 
 from api.models import EnrichedRequest, FixAction, IssueType, Severity, ValidationIssue
 from api.region_mapper import country_to_region

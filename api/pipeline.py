@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+import types
+from typing import Any, get_args, get_origin, Union
 
 from api.data_loader import DataStore
 from api.interpreter import interpret_request
@@ -27,15 +28,43 @@ def _apply_fixes(
     enriched: EnrichedRequest,
     issues: list[ValidationIssue],
 ) -> dict[str, Any]:
-    """Build a corrected copy of the enriched request with all fixes applied."""
+    """Build a corrected copy of the enriched request with all fixes applied.
+
+    Coerces suggested string values to the target field's type using
+    the EnrichedRequest model schema.
+    """
     data = enriched.model_dump(mode="json")
+    field_types = {
+        name: info.annotation
+        for name, info in EnrichedRequest.model_fields.items()
+    }
 
     for issue in issues:
         if issue.fix_action and issue.fix_action.suggested_value:
             field = issue.fix_action.field
-            value = issue.fix_action.suggested_value
-            if field in data:
-                data[field] = value
+            value: Any = issue.fix_action.suggested_value
+            if field not in data:
+                continue
+            # Coerce string value to the field's expected type
+            target_type = field_types.get(field)
+            # Unwrap Optional[X] / X | None to its inner type
+            origin = get_origin(target_type)
+            if origin is Union or isinstance(target_type, types.UnionType):
+                inner = [t for t in get_args(target_type) if t is not type(None)]
+                target_type = inner[0] if inner else target_type
+            if target_type is int:
+                try:
+                    value = int(value)
+                except (ValueError, TypeError):
+                    pass
+            elif target_type is float:
+                try:
+                    value = float(value)
+                except (ValueError, TypeError):
+                    pass
+            elif target_type is bool and isinstance(value, str):
+                value = value.lower() in ("true", "1", "yes")
+            data[field] = value
 
     return data
 
@@ -64,9 +93,6 @@ async def process_request(form_input: FormInput) -> ValidationResult:
     # ── Category disambiguation check ──
     cat_suggestion = enriched.category_suggestion
     if cat_suggestion and cat_suggestion.needs_disambiguation:
-        alt_names = [
-            f"{a.category_l1} > {a.category_l2}" for a in cat_suggestion.alternatives
-        ]
         issues_pre: list[ValidationIssue] = [
             ValidationIssue(
                 issue_id="CAT-001",

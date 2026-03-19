@@ -7,7 +7,7 @@ reviewers can trace exactly why a supplier was ranked (or excluded).
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Optional
 
@@ -148,7 +148,7 @@ class RankedSupplierOutput(BaseModel):
     """Complete ranking response — ready for the UI and for audit review."""
 
     request_id: str
-    ranked_at: datetime = Field(default_factory=datetime.utcnow)
+    ranked_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     method_used: RankingMethod = RankingMethod.DETERMINISTIC
 
     # Parameters

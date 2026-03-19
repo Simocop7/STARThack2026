@@ -2,7 +2,7 @@
 
 from datetime import date, timedelta
 
-from api.models import EnrichedRequest, IssueType, Severity
+from api.models import EnrichedRequest, Severity
 from api.validators.lead_time import check_lead_time
 
 
