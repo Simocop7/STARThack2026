@@ -15,12 +15,19 @@ function confidenceColor(confidence: number): string {
 
 export default function CategoryDisambiguation({ suggestion, lang, onConfirm }: Props) {
   const i = t(lang);
+  const isAmbiguous = suggestion.confidence >= 0.5 && suggestion.confidence < 0.85;
 
   return (
     <div className="bg-amber-50 border border-amber-300 rounded-lg p-5 mb-6">
       <h3 className="text-lg font-semibold text-amber-900 mb-3">
         {i.categoryDetected}
       </h3>
+
+      {isAmbiguous && (
+        <div className="bg-yellow-100 border border-yellow-300 rounded-md px-4 py-3 mb-4 text-sm text-yellow-900">
+          ⚠️ Your request is ambiguous — please reformulate it in a more precise manner so the correct category can be determined with confidence.
+        </div>
+      )}
 
       {/* Primary suggestion */}
       <div className="bg-white border border-amber-200 rounded-lg p-4 mb-4">

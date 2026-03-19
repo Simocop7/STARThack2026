@@ -17,7 +17,10 @@ from api.models import (
 
 
 def _build_system_prompt(categories: list[dict], suppliers: list[dict]) -> str:
-    cat_lines = "\n".join(f"- {c['category_l1']} > {c['category_l2']} (unit: {c['typical_unit']})" for c in categories)
+    cat_lines = "\n".join(
+        f"- {c['category_l1']} > {c['category_l2']} (unit: {c['typical_unit']}): {c.get('category_description', '')}"
+        for c in categories
+    )
 
     # Deduplicate supplier names
     seen: set[str] = set()
@@ -62,9 +65,10 @@ INSTRUCTIONS:
    - If no category was provided by the user, infer it from the text.
    - Set category_confidence (0.0 to 1.0):
      * 0.9-1.0: Very clear match (e.g. "50 Dell laptops" → IT > Laptops)
-     * 0.7-0.89: Likely match but some ambiguity (e.g. "computers for engineering" → IT > Laptops or IT > Mobile Workstations?)
-     * 0.5-0.69: Ambiguous, multiple categories plausible
-     * Below 0.5: Cannot determine category
+     * 0.7-0.89: Good match — one category clearly fits even if item is unusual (e.g. "a glass of cola" → Facilities > Kitchen and Breakroom Supplies)
+     * 0.5-0.69: Genuinely ambiguous — two or more categories are equally plausible
+     * Below 0.5: Cannot determine category at all
+   - IMPORTANT: if the item fits one category significantly better than all others, score 0.75+. Only go below 0.6 when you truly cannot decide between categories.
    - category_reasoning: brief explanation of why this category was chosen
    - category_alternatives: if confidence < 0.9, provide up to 3 alternative categories with reasons. Each has: alt_category_l1, alt_category_l2, alt_reason.
 

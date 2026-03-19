@@ -2,12 +2,33 @@
 
 from __future__ import annotations
 
+<<<<<<< Updated upstream
 import asyncio
+=======
+>>>>>>> Stashed changes
 import logging
 import types
 from typing import Any, Union, get_args, get_origin
 
 from api.data_loader import DataStore
+
+logger = logging.getLogger(__name__)
+
+# ANSI colours for terminal output
+_R = "\033[0m"       # reset
+_BOLD = "\033[1m"
+_CYAN = "\033[96m"
+_GREEN = "\033[92m"
+_YELLOW = "\033[93m"
+_RED = "\033[91m"
+_DIM = "\033[2m"
+
+
+def _log(symbol: str, colour: str, label: str, detail: str = "") -> None:
+    msg = f"{colour}{_BOLD}{symbol} {label}{_R}"
+    if detail:
+        msg += f"  {_DIM}{detail}{_R}"
+    print(msg, flush=True)
 from api.interpreter import interpret_request
 from api.message_generator import generate_user_message
 from api.models import (
@@ -124,6 +145,7 @@ async def process_request(form_input: FormInput) -> ValidationResult:
     """Run the full 3-stage pipeline."""
     store = DataStore.get()
 
+<<<<<<< Updated upstream
     # ── Stage 1: LLM interpretation (with graceful degradation) ──
     try:
         enriched = await asyncio.wait_for(
@@ -137,6 +159,23 @@ async def process_request(form_input: FormInput) -> ValidationResult:
     except Exception:
         logger.exception("LLM interpretation failed — falling back to raw form data")
         enriched = _fallback_enriched(form_input)
+=======
+    desc_preview = (form_input.request_text or "")[:80].replace("\n", " ")
+    print(flush=True)
+    _log("▶", _CYAN, "PIPELINE START", f'"{desc_preview}{"…" if len(form_input.request_text or "") > 80 else ""}"')
+
+    # ── Stage 1: LLM interpretation ──
+    _log("1/3", _CYAN, "LLM Interpretation", "sending request to Azure OpenAI …")
+    enriched = await interpret_request(
+        form_input,
+        categories=store.categories,
+        suppliers=store.suppliers,
+    )
+    _log("  ✓", _GREEN, "Interpreted",
+         f"category={enriched.category_l1}/{enriched.category_l2}  "
+         f"qty={enriched.quantity}  country={enriched.delivery_country}  "
+         f"urgency={enriched.urgency}")
+>>>>>>> Stashed changes
 
     # If the form had a preferred_supplier text but the LLM couldn't resolve it,
     # try our own fuzzy lookup
@@ -149,10 +188,22 @@ async def process_request(form_input: FormInput) -> ValidationResult:
                     "preferred_supplier_name": store.get_supplier_name(resolved_id),
                 }
             )
+            _log("  ✓", _GREEN, "Preferred supplier resolved", store.get_supplier_name(resolved_id))
 
     # ── Category disambiguation check ──
     cat_suggestion = enriched.category_suggestion
-    if cat_suggestion and cat_suggestion.needs_disambiguation:
+    user_confirmed_category = bool(form_input.category_l1 and form_input.category_l2)
+    if cat_suggestion and cat_suggestion.needs_disambiguation and not user_confirmed_category:
+        _log("  !", _YELLOW, "Category ambiguous",
+             f"{cat_suggestion.category_l1}/{cat_suggestion.category_l2} ({cat_suggestion.confidence:.0%} confidence)")
+        conf = cat_suggestion.confidence
+        if conf < 0.5:
+            proposed_fix = "Please confirm or select the correct category."
+        else:
+            proposed_fix = (
+                "Your request is ambiguous — please reformulate it in a more precise manner "
+                "so the correct category can be determined with confidence."
+            )
         issues_pre: list[ValidationIssue] = [
             ValidationIssue(
                 issue_id="CAT-001",
@@ -163,7 +214,7 @@ async def process_request(form_input: FormInput) -> ValidationResult:
                     f"with {cat_suggestion.confidence:.0%} confidence. "
                     f"Reason: {cat_suggestion.reasoning}"
                 ),
-                proposed_fix="Please confirm or select the correct category.",
+                proposed_fix=proposed_fix,
                 fix_action=FixAction(
                     field="category_l2",
                     suggested_value=cat_suggestion.category_l2,
@@ -175,10 +226,15 @@ async def process_request(form_input: FormInput) -> ValidationResult:
         issues_pre = []
 
     # ── Stage 2: Deterministic validation ──
+    _log("2/3", _CYAN, "Validation", "running 5 deterministic validators …")
     issues: list[ValidationIssue] = issues_pre
 
-    issues.extend(check_completeness(enriched))
+    completeness_issues = check_completeness(enriched)
+    issues.extend(completeness_issues)
+    _log("  ·", _DIM, "completeness",
+         f"{len(completeness_issues)} issue(s)" if completeness_issues else "OK")
 
+<<<<<<< Updated upstream
     issues.extend(check_category(enriched, store.category_index))
 
     issues.extend(
@@ -188,26 +244,53 @@ async def process_request(form_input: FormInput) -> ValidationResult:
             supplier_by_key=store.supplier_by_key,
             policies=store.policies,
         )
+=======
+    supplier_issues = check_supplier(
+        enriched,
+        suppliers_by_category=store.suppliers_by_category,
+        supplier_by_key=store.supplier_by_key,
+        policies=store.policies,
+>>>>>>> Stashed changes
     )
+    issues.extend(supplier_issues)
+    _log("  ·", _DIM, "supplier eligibility",
+         f"{len(supplier_issues)} issue(s)" if supplier_issues else "OK")
 
-    issues.extend(
-        check_lead_time(
-            enriched,
-            pricing_index=store.pricing_index,
-            suppliers_by_category=store.suppliers_by_category,
-        )
+    lead_time_issues = check_lead_time(
+        enriched,
+        pricing_index=store.pricing_index,
+        suppliers_by_category=store.suppliers_by_category,
     )
+    issues.extend(lead_time_issues)
+    _log("  ·", _DIM, "lead time",
+         f"{len(lead_time_issues)} issue(s)" if lead_time_issues else "OK")
 
-    issues.extend(check_contradictions(enriched, form_input))
+    contradiction_issues = check_contradictions(enriched, form_input)
+    issues.extend(contradiction_issues)
+    _log("  ·", _DIM, "contradictions",
+         f"{len(contradiction_issues)} issue(s)" if contradiction_issues else "OK")
 
-    issues.extend(check_policy_rules(enriched, store.policies))
+    policy_issues = check_policy_rules(enriched, store.policies)
+    issues.extend(policy_issues)
+    _log("  ·", _DIM, "policy rules",
+         f"{len(policy_issues)} issue(s)" if policy_issues else "OK")
 
     is_valid = not any(i.severity in (Severity.CRITICAL, Severity.HIGH) for i in issues)
+
+    critical_count = sum(1 for i in issues if i.severity == Severity.CRITICAL)
+    high_count = sum(1 for i in issues if i.severity == Severity.HIGH)
+    total_issues = len(issues)
+    if is_valid:
+        _log("  ✓", _GREEN, "Validation PASSED", f"{total_issues} issue(s) total (none blocking)")
+    else:
+        _log("  ✗", _RED, "Validation FAILED",
+             f"{critical_count} critical  {high_count} high  {total_issues} total")
 
     corrected = _apply_fixes(enriched, issues)
 
     # ── Stage 3: LLM message generation (with graceful degradation) ──
     blocking_issues = [i for i in issues if i.severity in (Severity.CRITICAL, Severity.HIGH)]
+<<<<<<< Updated upstream
     try:
         user_message = await asyncio.wait_for(
             generate_user_message(
@@ -221,6 +304,25 @@ async def process_request(form_input: FormInput) -> ValidationResult:
     except Exception:
         logger.exception("LLM message generation failed — using fallback message")
         user_message = _fallback_user_message(issues, form_input.language)
+=======
+    if blocking_issues:
+        _log("3/3", _CYAN, "Message generation",
+             f"generating user-facing explanation for {len(blocking_issues)} blocking issue(s) …")
+    else:
+        _log("3/3", _CYAN, "Message generation", "no blocking issues — generating summary …")
+
+    user_message = await generate_user_message(
+        enriched,
+        blocking_issues,
+        corrected,
+        language=form_input.language,
+    )
+    _log("  ✓", _GREEN, "Message ready", f"language={form_input.language}")
+
+    result_label = _GREEN + "✔ CAN PROCEED" if is_valid else _RED + "✘ BLOCKED"
+    _log("◀", _CYAN, "PIPELINE DONE", f"{result_label}{_R}")
+    print(flush=True)
+>>>>>>> Stashed changes
 
     return ValidationResult(
         is_valid=is_valid,

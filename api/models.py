@@ -81,6 +81,7 @@ class FormInput(BaseModel):
     preferred_supplier: Optional[str] = Field(None, max_length=200)
     language: str = "en"  # ISO 639-1 code chosen by user
 
+<<<<<<< Updated upstream
     @field_validator("request_text")
     @classmethod
     def sanitize_request_text(cls, v: str) -> str:
@@ -102,6 +103,24 @@ class FormInput(BaseModel):
         if v not in _VALID_COUNTRY_CODES:
             return None  # Silently discard invalid codes instead of crashing
         return v
+=======
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def coerce_quantity(cls, v: object) -> Optional[int]:
+        if v is None or v == "":
+            return None
+        try:
+            return int(float(str(v)))
+        except (ValueError, TypeError):
+            return None
+
+    @field_validator("required_by_date", mode="before")
+    @classmethod
+    def coerce_date(cls, v: object) -> Optional[date]:
+        if v is None or v == "":
+            return None
+        return v  # pydantic handles valid date strings
+>>>>>>> Stashed changes
 
     @field_validator("language")
     @classmethod

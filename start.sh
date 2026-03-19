@@ -51,10 +51,23 @@ if [ ! -d frontend/node_modules ]; then
   (cd frontend && npm install)
 fi
 
+# --- Kill any process already on port 8000 ---
+fuser -k 8000/tcp 2>/dev/null || true
+
 # --- Start Backend ---
 echo -e "${GREEN}Starting backend on http://localhost:8000${NC}"
 uvicorn api.main:app --reload --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
+
+# Wait for backend to be ready (up to 30s)
+echo -e "${GREEN}Waiting for backend to be ready...${NC}"
+for i in $(seq 1 30); do
+  if curl -sf http://localhost:8000/api/health > /dev/null 2>&1; then
+    echo -e "${GREEN}Backend is ready.${NC}"
+    break
+  fi
+  sleep 1
+done
 
 # --- Start Frontend (Vite dev server with proxy) ---
 echo -e "${GREEN}Starting frontend on http://localhost:5173${NC}"

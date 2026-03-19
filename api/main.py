@@ -16,6 +16,7 @@ from typing import AsyncIterator
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
@@ -37,6 +38,7 @@ from api.voice_parser import parse_voice_transcript
 
 load_dotenv()
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -52,6 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Smart Procurement Validator", version="0.1.0", lifespan=lifespan)
 
 
+<<<<<<< Updated upstream
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Catch-all handler so judges never see a raw Python traceback."""
@@ -61,6 +64,52 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "An unexpected error occurred. Please try again."},
     )
 
+=======
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    body = None
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    errors = exc.errors()
+    logger.error(
+        "422 Unprocessable Content on %s\nErrors: %s\nBody: %s",
+        request.url.path,
+        errors,
+        body,
+    )
+    # Coerce common field issues and retry
+    if body and isinstance(body, dict):
+        fixed = dict(body)
+        # Empty string dates → null
+        for date_field in ("required_by_date",):
+            if fixed.get(date_field) == "":
+                fixed[date_field] = None
+        # Empty string numbers → null
+        for num_field in ("quantity",):
+            if fixed.get(num_field) == "":
+                fixed[num_field] = None
+        try:
+            from api.models import FormInput
+            form = FormInput(**fixed)
+            from api.pipeline import process_request
+            result = await process_request(form)
+            return JSONResponse(content=result.model_dump(mode="json"))
+        except Exception as retry_exc:
+            logger.error("Auto-fix retry also failed: %s", retry_exc)
+
+    friendly = [
+        {"field": ".".join(str(l) for l in e.get("loc", [])), "message": e.get("msg", "")}
+        for e in errors
+    ]
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Invalid request data", "errors": friendly},
+    )
+
+
+>>>>>>> Stashed changes
 # ---------------------------------------------------------------------------
 # Simple in-memory rate limiter (no extra dependency)
 # ---------------------------------------------------------------------------

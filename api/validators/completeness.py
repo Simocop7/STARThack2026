@@ -46,6 +46,19 @@ def check_completeness(enriched: EnrichedRequest) -> list[ValidationIssue]:
             )
         )
 
+    if enriched.required_by_date is not None and enriched.required_by_date.year >= 2040:
+        counter += 1
+        issues.append(
+            ValidationIssue(
+                issue_id=f"COMP-{counter:03d}",
+                severity=Severity.CRITICAL,
+                type=IssueType.MISSING_INFO,
+                description=f"Required-by date '{enriched.required_by_date}' has year {enriched.required_by_date.year}, which exceeds the maximum allowed year of 2039.",
+                proposed_fix="Please enter a valid required-by date (before year 2040).",
+                fix_action=FixAction(field="required_by_date"),
+            )
+        )
+
     if enriched.quantity is not None and enriched.quantity < 0:
         counter += 1
         issues.append(
