@@ -4,9 +4,25 @@ export interface FormData {
   unit_of_measure: string;
   category_l1: string;
   category_l2: string;
-  delivery_country: string;
+  delivery_address: string;
   required_by_date: string;
   preferred_supplier: string;
+  language: string;
+}
+
+export interface CategoryAlternative {
+  category_l1: string;
+  category_l2: string;
+  reason: string;
+}
+
+export interface CategorySuggestion {
+  category_l1: string;
+  category_l2: string;
+  confidence: number;
+  reasoning: string;
+  alternatives: CategoryAlternative[];
+  needs_disambiguation: boolean;
 }
 
 export interface FixAction {
@@ -45,4 +61,5 @@ export interface ValidationResult {
   enriched_request: Record<string, unknown>;
   corrected_request: Record<string, unknown> | null;
   user_message: UserMessage | null;
+  category_suggestion: CategorySuggestion | null;
 }

@@ -9,7 +9,9 @@ from api.interpreter import interpret_request
 from api.message_generator import generate_user_message
 from api.models import (
     EnrichedRequest,
+    FixAction,
     FormInput,
+    IssueType,
     Severity,
     ValidationIssue,
     ValidationResult,
@@ -54,11 +56,40 @@ async def process_request(form_input: FormInput) -> ValidationResult:
     if form_input.preferred_supplier and not enriched.preferred_supplier_id:
         resolved_id = store.get_supplier_id(form_input.preferred_supplier)
         if resolved_id:
-            enriched.preferred_supplier_id = resolved_id
-            enriched.preferred_supplier_name = store.get_supplier_name(resolved_id)
+            enriched = enriched.model_copy(update={
+                "preferred_supplier_id": resolved_id,
+                "preferred_supplier_name": store.get_supplier_name(resolved_id),
+            })
+
+    # ── Category disambiguation check ──
+    cat_suggestion = enriched.category_suggestion
+    if cat_suggestion and cat_suggestion.needs_disambiguation:
+        alt_names = [
+            f"{a.category_l1} > {a.category_l2}" for a in cat_suggestion.alternatives
+        ]
+        issues_pre: list[ValidationIssue] = [
+            ValidationIssue(
+                issue_id="CAT-001",
+                severity=Severity.HIGH,
+                type=IssueType.CATEGORY_AMBIGUOUS,
+                description=(
+                    f"Category auto-detected as '{cat_suggestion.category_l1} > {cat_suggestion.category_l2}' "
+                    f"with {cat_suggestion.confidence:.0%} confidence. "
+                    f"Reason: {cat_suggestion.reasoning}"
+                ),
+                proposed_fix="Please confirm or select the correct category.",
+                fix_action=FixAction(
+                    field="category_l2",
+                    suggested_value=cat_suggestion.category_l2,
+                    alternatives=[a.category_l2 for a in cat_suggestion.alternatives],
+                ),
+            )
+        ]
+    else:
+        issues_pre = []
 
     # ── Stage 2: Deterministic validation ──
-    issues: list[ValidationIssue] = []
+    issues: list[ValidationIssue] = issues_pre
 
     issues.extend(check_completeness(enriched))
 
@@ -90,7 +121,7 @@ async def process_request(form_input: FormInput) -> ValidationResult:
         enriched,
         issues,
         corrected,
-        language=enriched.detected_language,
+        language=form_input.language,
     )
 
     return ValidationResult(
@@ -99,4 +130,5 @@ async def process_request(form_input: FormInput) -> ValidationResult:
         enriched_request=enriched,
         corrected_request=corrected,
         user_message=user_message,
+        category_suggestion=cat_suggestion,
     )

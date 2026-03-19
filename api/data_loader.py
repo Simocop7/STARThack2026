@@ -42,17 +42,20 @@ def build_category_index(categories: list[dict]) -> dict[str, list[str]]:
 # ---------------------------------------------------------------------------
 
 def load_suppliers() -> list[dict[str, Any]]:
-    rows = _read_csv("suppliers.csv")
-    for row in rows:
-        row["service_regions"] = [r.strip() for r in row["service_regions"].split(";") if r.strip()]
-        row["quality_score"] = int(row["quality_score"])
-        row["risk_score"] = int(row["risk_score"])
-        row["esg_score"] = int(row["esg_score"])
-        row["preferred_supplier"] = row["preferred_supplier"] == "True"
-        row["is_restricted"] = row["is_restricted"] == "True"
-        row["data_residency_supported"] = row["data_residency_supported"] == "True"
-        row["capacity_per_month"] = int(row["capacity_per_month"])
-    return rows
+    return [
+        {
+            **row,
+            "service_regions": [r.strip() for r in row["service_regions"].split(";") if r.strip()],
+            "quality_score": int(row["quality_score"]),
+            "risk_score": int(row["risk_score"]),
+            "esg_score": int(row["esg_score"]),
+            "preferred_supplier": row["preferred_supplier"] == "True",
+            "is_restricted": row["is_restricted"] == "True",
+            "data_residency_supported": row["data_residency_supported"] == "True",
+            "capacity_per_month": int(row["capacity_per_month"]),
+        }
+        for row in _read_csv("suppliers.csv")
+    ]
 
 
 def build_supplier_by_key(suppliers: list[dict]) -> dict[tuple[str, str, str], dict]:
@@ -82,16 +85,19 @@ def build_suppliers_by_category(suppliers: list[dict]) -> dict[tuple[str, str], 
 # ---------------------------------------------------------------------------
 
 def load_pricing() -> list[dict[str, Any]]:
-    rows = _read_csv("pricing.csv")
-    for row in rows:
-        row["min_quantity"] = int(row["min_quantity"])
-        row["max_quantity"] = int(row["max_quantity"])
-        row["unit_price"] = float(row["unit_price"])
-        row["moq"] = int(row["moq"])
-        row["standard_lead_time_days"] = int(row["standard_lead_time_days"])
-        row["expedited_lead_time_days"] = int(row["expedited_lead_time_days"])
-        row["expedited_unit_price"] = float(row["expedited_unit_price"])
-    return rows
+    return [
+        {
+            **row,
+            "min_quantity": int(row["min_quantity"]),
+            "max_quantity": int(row["max_quantity"]),
+            "unit_price": float(row["unit_price"]),
+            "moq": int(row["moq"]),
+            "standard_lead_time_days": int(row["standard_lead_time_days"]),
+            "expedited_lead_time_days": int(row["expedited_lead_time_days"]),
+            "expedited_unit_price": float(row["expedited_unit_price"]),
+        }
+        for row in _read_csv("pricing.csv")
+    ]
 
 
 def build_pricing_index(
@@ -116,11 +122,9 @@ def load_policies() -> dict[str, Any]:
 
 
 def normalize_policies(raw: dict) -> dict[str, Any]:
-    """Normalize schema inconsistencies in policies.json."""
-    # Normalize approval thresholds (USD uses different field names)
-    thresholds = []
-    for t in raw.get("approval_thresholds", []):
-        thresholds.append({
+    """Normalize schema inconsistencies in policies.json. Returns a new dict."""
+    thresholds = [
+        {
             "threshold_id": t.get("threshold_id"),
             "currency": t.get("currency"),
             "min_amount": t.get("min_amount", t.get("min_value", 0)),
@@ -128,21 +132,25 @@ def normalize_policies(raw: dict) -> dict[str, Any]:
             "min_supplier_quotes": t.get("min_supplier_quotes", t.get("quotes_required", 1)),
             "managed_by": t.get("managed_by", t.get("approvers", [])),
             "deviation_approval_required_from": t.get("deviation_approval_required_from", []),
-        })
-    raw["approval_thresholds"] = thresholds
+        }
+        for t in raw.get("approval_thresholds", [])
+    ]
 
-    # Normalize escalation rules (ER-008 uses different field names)
-    escalations = []
-    for e in raw.get("escalation_rules", []):
-        escalations.append({
+    escalations = [
+        {
             "rule_id": e.get("rule_id"),
             "trigger": e.get("trigger"),
             "action": e.get("action", "escalate"),
             "escalate_to": e.get("escalate_to", e.get("escalation_target", "")),
-        })
-    raw["escalation_rules"] = escalations
+        }
+        for e in raw.get("escalation_rules", [])
+    ]
 
-    return raw
+    return {
+        **raw,
+        "approval_thresholds": thresholds,
+        "escalation_rules": escalations,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +177,9 @@ class DataStore:
         self.suppliers = load_suppliers()
         self.supplier_by_key = build_supplier_by_key(self.suppliers)
         self.supplier_by_name = build_supplier_by_name(self.suppliers)
+        self.supplier_id_to_name: dict[str, str] = {
+            s["supplier_id"]: s["supplier_name"] for s in self.suppliers
+        }
         self.suppliers_by_category = build_suppliers_by_category(self.suppliers)
 
         self.pricing = load_pricing()
@@ -196,8 +207,5 @@ class DataStore:
         return None
 
     def get_supplier_name(self, supplier_id: str) -> str | None:
-        for s in self.suppliers:
-            if s["supplier_id"] == supplier_id:
-                return s["supplier_name"]
-        return None
+        return self.supplier_id_to_name.get(supplier_id)
 

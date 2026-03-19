@@ -1,3 +1,5 @@
+import { t } from "../i18n";
+
 interface Props {
   title: string;
   explanation: string;
@@ -5,6 +7,7 @@ interface Props {
   severity: string;
   fixField: string | null;
   fixValue: string | null;
+  lang: string;
 }
 
 const SEVERITY_STYLES: Record<string, { bg: string; text: string; badge: string }> = {
@@ -22,7 +25,9 @@ export default function IssueCard({
   severity,
   fixField,
   fixValue,
+  lang,
 }: Props) {
+  const i = t(lang);
   const style = SEVERITY_STYLES[severity] || SEVERITY_STYLES.medium;
 
   return (
@@ -39,7 +44,7 @@ export default function IssueCard({
           </div>
           <p className="text-sm text-gray-700 mt-1">{explanation}</p>
           <div className="mt-2 flex items-center gap-2">
-            <span className="text-xs text-gray-500">Suggested fix:</span>
+            <span className="text-xs text-gray-500">{i.suggestedFix}</span>
             <span className="text-sm font-medium text-gray-800">
               {proposedFix}
             </span>

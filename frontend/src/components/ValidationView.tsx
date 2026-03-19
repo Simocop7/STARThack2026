@@ -1,14 +1,17 @@
+import { t } from "../i18n";
 import type { ValidationResult } from "../types";
 import IssueCard from "./IssueCard";
 
 interface Props {
   result: ValidationResult;
   onBack: () => void;
+  lang: string;
 }
 
 const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 
-export default function ValidationView({ result, onBack }: Props) {
+export default function ValidationView({ result, onBack, lang }: Props) {
+  const i = t(lang);
   const { is_valid, issues, user_message, corrected_request, enriched_request } =
     result;
 
@@ -27,7 +30,7 @@ export default function ValidationView({ result, onBack }: Props) {
         onClick={onBack}
         className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
       >
-        &larr; Back to form
+        &larr; {i.backToForm}
       </button>
 
       {/* Status banner */}
@@ -43,7 +46,7 @@ export default function ValidationView({ result, onBack }: Props) {
             is_valid ? "text-green-800" : "text-red-800"
           }`}
         >
-          {is_valid ? "Request validated" : `${blockingCount} issue${blockingCount !== 1 ? "s" : ""} to resolve`}
+          {is_valid ? i.requestValidated : i.issuesToResolve(blockingCount)}
         </h2>
         {user_message?.summary && (
           <p
@@ -60,7 +63,7 @@ export default function ValidationView({ result, onBack }: Props) {
       {user_message && user_message.issues.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">
-            Details & Suggested Fixes
+            {i.detailsAndFixes}
           </h3>
           {user_message.issues.map((issue, idx) => {
             const matchingIssue = sortedIssues[idx];
@@ -73,6 +76,7 @@ export default function ValidationView({ result, onBack }: Props) {
                 severity={matchingIssue?.severity || "medium"}
                 fixField={issue.fix_field}
                 fixValue={issue.fix_value}
+                lang={lang}
               />
             );
           })}
@@ -84,7 +88,7 @@ export default function ValidationView({ result, onBack }: Props) {
         sortedIssues.length > 0 && (
           <div className="space-y-3">
             <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">
-              Validation Issues
+              {i.validationIssues}
             </h3>
             {sortedIssues.map((issue) => (
               <IssueCard
@@ -95,12 +99,13 @@ export default function ValidationView({ result, onBack }: Props) {
                 severity={issue.severity}
                 fixField={issue.fix_action?.field ?? null}
                 fixValue={issue.fix_action?.suggested_value ?? null}
+                lang={lang}
               />
             ))}
           </div>
         )}
 
-      {/* Enriched request preview */}
+      {/* Enriched request preview — JSON always in English */}
       <div className="border border-gray-200 rounded-lg">
         <button
           className="w-full px-4 py-3 text-left text-sm font-medium text-gray-700 bg-gray-50 rounded-t-lg hover:bg-gray-100"
@@ -109,14 +114,14 @@ export default function ValidationView({ result, onBack }: Props) {
             if (target) target.classList.toggle("hidden");
           }}
         >
-          Enriched Request JSON (click to expand)
+          {i.enrichedJson}
         </button>
         <pre className="hidden px-4 py-3 text-xs text-gray-600 overflow-auto max-h-96 bg-white rounded-b-lg">
           {JSON.stringify(enriched_request, null, 2)}
         </pre>
       </div>
 
-      {/* Corrected request */}
+      {/* Corrected request — JSON always in English */}
       {corrected_request && (
         <div className="border border-gray-200 rounded-lg">
           <button
@@ -126,7 +131,7 @@ export default function ValidationView({ result, onBack }: Props) {
               if (target) target.classList.toggle("hidden");
             }}
           >
-            Corrected Request JSON (with fixes applied)
+            {i.correctedJson}
           </button>
           <pre className="hidden px-4 py-3 text-xs text-gray-600 overflow-auto max-h-96 bg-white rounded-b-lg">
             {JSON.stringify(corrected_request, null, 2)}
@@ -137,7 +142,7 @@ export default function ValidationView({ result, onBack }: Props) {
       {/* Confirm button */}
       {is_valid && (
         <button className="w-full bg-green-600 text-white rounded-lg px-4 py-3 font-medium hover:bg-green-700 transition-colors">
-          Confirm Request
+          {i.confirmRequest}
         </button>
       )}
 
@@ -147,7 +152,7 @@ export default function ValidationView({ result, onBack }: Props) {
             {user_message.all_ok_message}
           </p>
           <button className="bg-blue-600 text-white rounded-lg px-6 py-3 font-medium hover:bg-blue-700 transition-colors">
-            Accept All Fixes & Confirm
+            {i.acceptAllFixes}
           </button>
         </div>
       )}

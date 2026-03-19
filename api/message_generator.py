@@ -6,18 +6,8 @@ import json
 import os
 from typing import Any
 
-from anthropic import AsyncAnthropic
-
+from api.azure_client import get_azure_client
 from api.models import EnrichedRequest, UserMessage, UserMessageIssue, ValidationIssue
-
-_client: AsyncAnthropic | None = None
-
-
-def _get_client() -> AsyncAnthropic:
-    global _client
-    if _client is None:
-        _client = AsyncAnthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
-    return _client
 
 
 _SYSTEM_PROMPT = """You are a procurement assistant. Your job is to communicate validation results to the user in a clear, friendly, professional tone.
@@ -33,38 +23,41 @@ INSTRUCTIONS:
    - The suggested value (if applicable)
 4. If there are no issues, write a positive summary confirming the request looks good.
 5. The corrected_json should be the enriched request with all fixes pre-applied.
-6. Use the generate_message tool to return your response."""
+6. Use the generate_message function to return your response."""
 
 _TOOL_SCHEMA = {
-    "name": "generate_message",
-    "description": "Generate the user-facing validation message.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "summary": {
-                "type": "string",
-                "description": "1-2 sentence overview of the validation result",
-            },
-            "issues": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string"},
-                        "explanation": {"type": "string"},
-                        "proposed_fix": {"type": "string"},
-                        "fix_field": {"type": ["string", "null"]},
-                        "fix_value": {"type": ["string", "null"]},
+    "type": "function",
+    "function": {
+        "name": "generate_message",
+        "description": "Generate the user-facing validation message.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "summary": {
+                    "type": "string",
+                    "description": "1-2 sentence overview of the validation result",
+                },
+                "issues": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "title": {"type": "string"},
+                            "explanation": {"type": "string"},
+                            "proposed_fix": {"type": "string"},
+                            "fix_field": {"type": ["string", "null"]},
+                            "fix_value": {"type": ["string", "null"]},
+                        },
+                        "required": ["title", "explanation", "proposed_fix"],
                     },
-                    "required": ["title", "explanation", "proposed_fix"],
+                },
+                "all_ok_message": {
+                    "type": "string",
+                    "description": "Message to show when user accepts all fixes",
                 },
             },
-            "all_ok_message": {
-                "type": "string",
-                "description": "Message to show when user accepts all fixes",
-            },
+            "required": ["summary", "issues", "all_ok_message"],
         },
-        "required": ["summary", "issues", "all_ok_message"],
     },
 }
 
@@ -75,8 +68,9 @@ async def generate_user_message(
     corrected: dict[str, Any],
     language: str = "en",
 ) -> UserMessage:
-    """Call Claude to produce a natural-language message in the user's language."""
-    client = _get_client()
+    """Call Azure OpenAI to produce a natural-language message in the user's language."""
+    client = get_azure_client()
+    deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
 
     issues_data = [
         {
@@ -102,33 +96,42 @@ VALIDATION ISSUES ({len(issues)} found):
 CORRECTED JSON (with fixes pre-applied):
 {json.dumps(corrected, indent=2)}
 
-Generate the user message using the generate_message tool."""
+Generate the user message using the generate_message function."""
 
-    response = await client.messages.create(
-        model="claude-sonnet-4-20250514",
+    response = await client.chat.completions.create(
+        model=deployment,
         max_tokens=1024,
-        system=_SYSTEM_PROMPT,
+        messages=[
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": user_msg},
+        ],
         tools=[_TOOL_SCHEMA],
-        tool_choice={"type": "tool", "name": "generate_message"},
-        messages=[{"role": "user", "content": user_msg}],
+        tool_choice={"type": "function", "function": {"name": "generate_message"}},
     )
 
-    tool_result: dict[str, Any] = {}
-    for block in response.content:
-        if block.type == "tool_use":
-            tool_result = block.input
-            break
+    message = response.choices[0].message
+    if not message.tool_calls:
+        raise RuntimeError("LLM did not return a tool call for message generation")
 
-    msg_issues = [
-        UserMessageIssue(
-            title=item.get("title", ""),
-            explanation=item.get("explanation", ""),
-            proposed_fix=item.get("proposed_fix", ""),
-            fix_field=item.get("fix_field"),
-            fix_value=item.get("fix_value"),
-        )
-        for item in tool_result.get("issues", [])
-    ]
+    try:
+        tool_result: dict[str, Any] = json.loads(message.tool_calls[0].function.arguments)
+    except (json.JSONDecodeError, IndexError, AttributeError) as exc:
+        raise RuntimeError("LLM returned an unparseable response for message generation") from exc
+
+    msg_issues: list[UserMessageIssue] = []
+    for item in tool_result.get("issues", []):
+        try:
+            msg_issues.append(
+                UserMessageIssue(
+                    title=item.get("title", ""),
+                    explanation=item.get("explanation", ""),
+                    proposed_fix=item.get("proposed_fix", ""),
+                    fix_field=item.get("fix_field"),
+                    fix_value=item.get("fix_value"),
+                )
+            )
+        except (TypeError, ValueError):
+            continue  # skip malformed issue entries
 
     return UserMessage(
         summary=tool_result.get("summary", ""),

@@ -6,9 +6,10 @@ from api.models import EnrichedRequest, FixAction, IssueType, Severity, Validati
 
 _REQUIRED_FIELDS = {
     "quantity": "Quantity (number of items/units)",
-    "category_l1": "Category L1 (main category)",
-    "category_l2": "Category L2 (sub-category)",
-    "delivery_country": "Delivery country",
+    "category_l1": "Category L1 (auto-detected from your description)",
+    "category_l2": "Category L2 (auto-detected from your description)",
+    "delivery_address": "Delivery address",
+    "delivery_country": "Delivery country (could not determine country from address)",
     "required_by_date": "Required-by date",
 }
 

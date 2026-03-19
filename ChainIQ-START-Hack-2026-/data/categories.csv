@@ -14,11 +14,22 @@ IT,Cloud Storage,Cloud storage capacity,TB_month,usage
 IT,Cloud Networking,Cloud networking and traffic routing,GB_transfer,usage
 IT,Managed Cloud Platform Services,Managed Kubernetes and platform services,monthly_subscription,subscription
 IT,Cloud Security Services,Cloud security monitoring services,seat_license,subscription
+IT,Software Licenses,Commercial software licenses and SaaS subscriptions,license,subscription
+IT,Printers and Scanners,Office printers scanners and multifunction devices,device,tiered
+IT,Networking Equipment,Routers switches access points and cabling,device,tiered
+IT,Audio Video Equipment,Conferencing systems projectors and AV equipment,device,tiered
 Facilities,Workstations and Desks,Employee desks and workstations,unit,tiered
 Facilities,Office Chairs,Ergonomic seating,unit,tiered
 Facilities,Meeting Room Furniture,Meeting room tables and chairs,set,fixed
 Facilities,Storage Cabinets,Office storage furniture,unit,tiered
 Facilities,Reception and Lounge Furniture,Reception seating and lounge furniture,project,fixed
+Facilities,Lighting and Electrical,Office lighting fixtures bulbs and electrical supplies,unit,tiered
+Facilities,Cleaning and Janitorial Supplies,Cleaning products and janitorial equipment,unit,tiered
+Facilities,HVAC and Climate Control,Heating ventilation air conditioning maintenance and equipment,unit,tiered
+Facilities,Safety and Security Equipment,Fire extinguishers alarms CCTV access control systems,unit,tiered
+Facilities,Kitchen and Breakroom Supplies,Kitchen appliances coffee machines vending and breakroom items,unit,tiered
+Facilities,Signage and Wayfinding,Office signage nameplates and wayfinding systems,unit,fixed
+Facilities,Building Maintenance and Repairs,General building maintenance plumbing and repair services,project,fixed
 Professional Services,Cloud Architecture Consulting,Cloud architecture advisory services,consulting_day,day_rate
 Professional Services,Cybersecurity Advisory,Cybersecurity consulting services,consulting_day,day_rate
 Professional Services,Data Engineering Services,Data platform development consulting,consulting_day,day_rate
@@ -29,3 +40,6 @@ Marketing,Social Media Advertising,Social media campaign management,campaign,per
 Marketing,Content Production Services,Content creation and media production,project,fixed
 Marketing,Marketing Analytics Services,Marketing data analysis and reporting,monthly_subscription,subscription
 Marketing,Influencer Campaign Management,Influencer marketing campaigns,campaign,fixed
+Office Supplies,Stationery and Paper,Pens paper notebooks and general office stationery,unit,tiered
+Office Supplies,Printing and Copying Supplies,Toner cartridges ink and printing paper,unit,tiered
+Office Supplies,Packaging and Shipping Materials,Boxes tape labels and shipping supplies,unit,tiered

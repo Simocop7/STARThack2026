@@ -75,7 +75,7 @@ def check_lead_time(
         earliest = today + timedelta(days=best_expedited)
         issues.append(
             ValidationIssue(
-                issue_id="LT-001",
+                issue_id="LT-002",
                 severity=Severity.HIGH,
                 type=IssueType.LEAD_TIME_WARNING,
                 description=(
@@ -97,7 +97,7 @@ def check_lead_time(
         earliest_std = today + timedelta(days=best_standard)
         issues.append(
             ValidationIssue(
-                issue_id="LT-001",
+                issue_id="LT-003",
                 severity=Severity.MEDIUM,
                 type=IssueType.LEAD_TIME_WARNING,
                 description=(

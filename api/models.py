@@ -28,19 +28,38 @@ class IssueType(str, Enum):
     CAPACITY_EXCEEDED = "capacity_exceeded"
     LEAD_TIME_WARNING = "lead_time_warning"
     POLICY_NOTE = "policy_note"
+    CATEGORY_AMBIGUOUS = "category_ambiguous"
+
+
+# --- Category suggestion from LLM ---
+
+class CategoryAlternative(BaseModel):
+    category_l1: str
+    category_l2: str
+    reason: str
+
+
+class CategorySuggestion(BaseModel):
+    category_l1: str
+    category_l2: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    reasoning: str = ""
+    alternatives: list[CategoryAlternative] = Field(default_factory=list)
+    needs_disambiguation: bool = False
 
 
 # --- Form Input (what the user submits) ---
 
 class FormInput(BaseModel):
-    request_text: str = Field(..., min_length=1)
+    request_text: str = Field(..., min_length=1, max_length=10000)
     quantity: Optional[int] = None
     unit_of_measure: Optional[str] = None
     category_l1: Optional[str] = None
     category_l2: Optional[str] = None
-    delivery_country: Optional[str] = None
+    delivery_address: Optional[str] = None
     required_by_date: Optional[date] = None
     preferred_supplier: Optional[str] = None  # free text or name
+    language: str = "en"  # ISO 639-1 code chosen by user
 
 
 # --- Enriched Request (after LLM interpretation) ---
@@ -60,6 +79,7 @@ class EnrichedRequest(BaseModel):
     category_l1: Optional[str] = None
     category_l2: Optional[str] = None
     delivery_country: Optional[str] = None
+    delivery_address: Optional[str] = None
     required_by_date: Optional[date] = None
     preferred_supplier: Optional[str] = None
 
@@ -74,6 +94,9 @@ class EnrichedRequest(BaseModel):
     detected_language: str = "en"
     text_quantity_mentioned: Optional[int] = None
     text_contradictions: list[TextContradiction] = Field(default_factory=list)
+
+    # Auto-categorization
+    category_suggestion: Optional[CategorySuggestion] = None
 
 
 # --- Validation ---
@@ -114,3 +137,4 @@ class ValidationResult(BaseModel):
     enriched_request: EnrichedRequest
     corrected_request: Optional[dict] = None
     user_message: Optional[UserMessage] = None
+    category_suggestion: Optional[CategorySuggestion] = None
