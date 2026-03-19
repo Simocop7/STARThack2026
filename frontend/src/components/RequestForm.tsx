@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import type { FormData } from "../types";
 import VoiceInput, { type VoiceInputHandle } from "./VoiceInput";
+import { AIVoiceInput } from "./ui/ai-voice-input";
 
 
 const LANGUAGES = [
@@ -212,8 +213,6 @@ export default function RequestForm({
 
   // Stable ref to always call the latest handleVoiceTranscript (avoids stale closure in forceTranscript)
   const handleVoiceTranscriptRef = useRef<(transcript: string) => void>(() => {});
-  // When true, a force transcript should only parse/fill form and must not continue voice conversation.
-  const suppressVoiceFlowRef = useRef(false);
 
   const pendingAutoSubmit = useRef(false);
 
@@ -329,15 +328,12 @@ export default function RequestForm({
   }
 
   async function handleVoiceTranscript(transcript: string) {
-    const suppressVoiceFlow = suppressVoiceFlowRef.current;
-    suppressVoiceFlowRef.current = false;
-
     setVoiceParsing(true);
     setVoiceError(null);
     setMissingFields([]);
 
     // Activate voice mode on first voice input
-    if (!voiceMode && !suppressVoiceFlow) {
+    if (!voiceMode) {
       onVoiceModeChange(true);
     }
 
@@ -361,15 +357,13 @@ export default function RequestForm({
       parsed = localParseVoiceTranscript(transcript, form.language);
     }
 
-    // Merge parsed fields into form, preserving existing non-empty values.
-    // request_text: prefer the LLM-cleaned version from parse-voice (stripped of
-    // conversational filler), falling back to the raw transcript.
-    // category_l1/l2: never filled by parse-voice (the /api/validate LLM does
-    // that), so always leave them empty here — the backend will auto-detect them
-    // from request_text. Do NOT preserve a stale previous category if request_text changed.
+    // Merge parsed fields into form.
+    // request_text must stay exactly as dictated (word-by-word transcript).
+    // category_l1/l2: never filled by parse-voice (the /api/validate LLM does that),
+    // so leave them empty when transcript changes to force re-inference.
     let updatedForm: FormData = formRef.current;
     setForm((prev) => {
-      const newRequestText = parsed.request_text || transcript;
+      const newRequestText = transcript;
       const requestTextChanged = newRequestText !== prev.request_text;
       const updated = {
         ...prev,
@@ -415,10 +409,7 @@ export default function RequestForm({
 
     setMissingFields(stillMissingFriendly);
 
-    if (suppressVoiceFlow) {
-      // Manual "Done" path: parse/fill only, don't reopen/continue conversation.
-      // Also avoid autosubmit in this mode.
-    } else if (overlayActive) {
+    if (overlayActive) {
       onMissingFieldsDetected?.(stillMissingTechnical);
     } else if (voiceMode) {
       pendingAutoSubmit.current = true;
@@ -433,7 +424,6 @@ export default function RequestForm({
   // Register force-transcript callback for parent to bypass VoiceInput
   useEffect(() => {
     onRegisterForceTranscript?.((transcript: string) => {
-      suppressVoiceFlowRef.current = true;
       handleVoiceTranscriptRef.current(transcript);
     });
   }, [onRegisterForceTranscript]);
@@ -738,25 +728,14 @@ export default function RequestForm({
               <p className="text-xs text-gray-500 mt-0.5">{i.voiceInputHint}</p>
             </div>
 
-            {/* AI voice activation button */}
             {onActivateVoiceOverlay && (
               <div className={voiceParsing ? "pointer-events-none opacity-70" : undefined}>
-                <button
-                  type="button"
-                  onClick={onActivateVoiceOverlay}
-                  disabled={voiceParsing}
-                  className="relative flex items-center gap-2 px-5 py-3 rounded-full font-medium text-sm
-                    bg-gradient-to-r from-red-600 via-red-700 to-red-800 text-white
-                    hover:from-red-500 hover:via-red-600 hover:to-red-700
-                    shadow-lg shadow-red-200 hover:shadow-xl hover:shadow-red-300
-                    transition-all
-                    disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                  </svg>
-                  Voice Mode
-                </button>
+                <AIVoiceInput
+                  onStart={onActivateVoiceOverlay}
+                  onStop={() => onDeactivateVoiceOverlay?.()}
+                  active={overlayActive}
+                  className="py-1"
+                />
               </div>
             )}
 
@@ -785,7 +764,7 @@ export default function RequestForm({
               <div className="mt-2 text-sm text-red-600">{voiceError}</div>
             )}
 
-            {missingFields.length > 0 && !voiceMode && !overlayActive && (
+            {missingFields.length > 0 && !overlayActive && (
               <div className="mt-3 bg-red-50 border border-red-200 rounded-md p-3">
                 <p className="text-sm font-medium text-red-800">{i.voiceMissingFields}</p>
                 <ul className="mt-1 text-xs text-red-700 list-disc list-inside">
