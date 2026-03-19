@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import CategoryDisambiguation from "./CategoryDisambiguation";
+import { ProcurementLoading } from "./ui/procurement-loading";
 import RequestForm from "./RequestForm";
 import ValidationBanner from "./ValidationBanner";
 import SupplierRankingView from "./SupplierRankingView";
@@ -397,14 +399,13 @@ export default function ProcurementPortal({ onBack }: Props) {
               </div>
             )}
 
-            {(loading || rankingLoading || orderLoading) && (
-              <div className="flex flex-col items-center gap-4 py-16">
-                <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-                <p className="text-gray-600">
-                  {orderLoading ? "Placing order…" : rankingLoading ? "Finding best suppliers…" : i.analyzing}
-                </p>
-              </div>
-            )}
+            <AnimatePresence mode="wait">
+              {(loading || rankingLoading || orderLoading) && (
+                <ProcurementLoading
+                  phase={orderLoading ? "ordering" : rankingLoading ? "ranking" : "validating"}
+                />
+              )}
+            </AnimatePresence>
 
             {!loading && !rankingLoading && !orderLoading && orderConfirmation && (
               <OrderConfirmationView confirmation={orderConfirmation} onNewRequest={handleNewRequest} />
