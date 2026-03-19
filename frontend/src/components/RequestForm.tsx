@@ -23,6 +23,10 @@ interface Props {
   onVoiceModeChange: (active: boolean) => void;
   /** Ref to access VoiceInput's startListening */
   voiceInputRef?: React.RefObject<VoiceInputHandle | null>;
+  /** Hide the demo request selector (default: true) */
+  showDemoSelector?: boolean;
+  /** Label for the submit button */
+  submitLabel?: string;
 }
 
 const DEFAULT_DELIVERY_ADDRESS = "St. Gallen, Olma Halle 9";
@@ -34,6 +38,8 @@ export default function RequestForm({
   voiceMode,
   onVoiceModeChange,
   voiceInputRef,
+  showDemoSelector = true,
+  submitLabel,
 }: Props) {
   const [form, setForm] = useState<FormData>(
     initialData ?? {
@@ -211,7 +217,7 @@ export default function RequestForm({
       </div>
 
       {/* Demo selector */}
-      {demoRequests.length > 0 && (
+      {showDemoSelector && demoRequests.length > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <label className="block text-sm font-medium text-blue-800 mb-2">
             {i.loadDemo}
@@ -364,7 +370,7 @@ export default function RequestForm({
         type="submit"
         className="w-full bg-blue-600 text-white rounded-lg px-4 py-3 font-medium hover:bg-blue-700 transition-colors"
       >
-        {i.validateRequest}
+        {submitLabel ?? i.validateRequest}
       </button>
     </form>
   );

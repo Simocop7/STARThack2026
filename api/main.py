@@ -262,6 +262,60 @@ async def rank_suppliers_custom(
 
 # ── Order Placement ─────────────────────────────────────────────────────
 
+# ── Employee Request Store ───────────────────────────────────────────────────
+
+_employee_requests: list[dict] = []
+
+
+class EmployeeFormInput(BaseModel):
+    request_text: str = Field(..., min_length=1, max_length=10000)
+    quantity: int | None = None
+    unit_of_measure: str | None = None
+    delivery_address: str | None = None
+    required_by_date: str | None = None
+    preferred_supplier: str | None = None
+    language: str = "en"
+
+
+@app.post("/api/employee/submit")
+async def submit_employee_request(req: EmployeeFormInput) -> dict:
+    """Store a raw employee procurement request for the office to process."""
+    emp_id = f"EMP-{uuid.uuid4().hex[:8].upper()}"
+    record = {
+        "id": emp_id,
+        "submitted_at": dt.now(tz=timezone.utc).isoformat(),
+        "status": "pending",
+        "request_text": req.request_text,
+        "quantity": req.quantity,
+        "unit_of_measure": req.unit_of_measure or "",
+        "category_l1": "",
+        "category_l2": "",
+        "delivery_address": req.delivery_address or "",
+        "required_by_date": req.required_by_date or "",
+        "preferred_supplier": req.preferred_supplier or "",
+        "language": req.language,
+    }
+    _employee_requests.append(record)
+    return {"request_id": emp_id, "status": "pending"}
+
+
+@app.get("/api/employee/requests")
+async def get_employee_requests() -> dict:
+    """Return all submitted employee requests (newest first)."""
+    return {"requests": list(reversed(_employee_requests))}
+
+
+@app.patch("/api/employee/requests/{emp_id}/status")
+async def update_employee_request_status(emp_id: str, status: str) -> dict:
+    for r in _employee_requests:
+        if r["id"] == emp_id:
+            r["status"] = status
+            return {"ok": True}
+    raise HTTPException(status_code=404, detail="Request not found")
+
+
+# ── Order Placement ─────────────────────────────────────────────────────
+
 @app.post("/api/order", response_model=OrderConfirmation, dependencies=[Depends(verify_api_key)])
 async def place_order(order: OrderRequest) -> OrderConfirmation:
     """Record the procurement office's supplier selection and return a receipt."""

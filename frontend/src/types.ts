@@ -72,6 +72,7 @@ export interface RankedSupplierOutput {
   approval_threshold_id: string | null;
   approval_threshold_note: string | null;
   quotes_required: number | null;
+  currency: string;
   policies_checked: string[];
   llm_fallback_reason: string | null;
 }
@@ -121,6 +122,23 @@ export interface OrderConfirmation {
   quotes_required: number | null;
   notes: string | null;
   next_steps: string[];
+}
+
+// ── Employee Request Types ───────────────────────────────────────────
+
+export interface SubmittedRequest {
+  id: string;
+  submitted_at: string;
+  status: "pending" | "processing" | "completed";
+  request_text: string;
+  quantity: number | null;
+  unit_of_measure: string;
+  category_l1: string;
+  category_l2: string;
+  delivery_address: string;
+  required_by_date: string;
+  preferred_supplier: string;
+  language: string;
 }
 
 // ── Form Types ─────────────────────────────────────────────────────
@@ -182,10 +200,28 @@ export interface UserMessage {
   all_ok_message: string;
 }
 
+export interface EnrichedRequest {
+  request_text: string;
+  quantity: number | null;
+  unit_of_measure: string | null;
+  category_l1: string | null;
+  category_l2: string | null;
+  delivery_country: string | null;
+  delivery_address: string | null;
+  required_by_date: string | null;
+  preferred_supplier: string | null;
+  preferred_supplier_id: string | null;
+  preferred_supplier_name: string | null;
+  data_residency_required: boolean;
+  esg_requirement: boolean;
+  detected_language: string;
+  [key: string]: unknown;
+}
+
 export interface ValidationResult {
   is_valid: boolean;
   issues: ValidationIssue[];
-  enriched_request: Record<string, unknown>;
+  enriched_request: EnrichedRequest;
   corrected_request: Record<string, unknown> | null;
   user_message: UserMessage | null;
   category_suggestion: CategorySuggestion | null;

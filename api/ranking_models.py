@@ -180,6 +180,9 @@ class RankedSupplierOutput(BaseModel):
     approval_threshold_note: Optional[str] = None
     quotes_required: Optional[int] = None
 
+    # Currency (carried forward from order for display)
+    currency: str = "EUR"
+
     # Audit
     policies_checked: list[str] = Field(default_factory=list)
     llm_fallback_reason: Optional[str] = None

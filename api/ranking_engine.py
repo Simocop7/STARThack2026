@@ -594,6 +594,7 @@ def rank_suppliers_deterministically(
             request_id=order.request_id,
             method_used=RankingMethod.DETERMINISTIC,
             scoring_weights=weights,
+            currency=order.currency,
             escalations=[Escalation(
                 rule_id="ER-001", trigger="unknown_delivery_country",
                 escalate_to="Requester Clarification", blocking=True,
@@ -617,13 +618,6 @@ def rank_suppliers_deterministically(
     # ── Escalations from filter results ─────────────────────────────
 
     escalations: list[Escalation] = []
-
-    if order.budget_amount is None:
-        escalations.append(Escalation(
-            rule_id="ER-001", trigger="missing_budget",
-            escalate_to="Requester", blocking=False,
-            detail="Budget amount is not specified. Procurement cannot validate cost compliance or approval threshold without a stated budget.",
-        ))
 
     capacity_exceeded = [
         e for e in excluded
@@ -651,6 +645,7 @@ def rank_suppliers_deterministically(
             request_id=order.request_id,
             method_used=RankingMethod.DETERMINISTIC,
             scoring_weights=weights,
+            currency=order.currency,
             excluded=excluded,
             escalations=escalations,
             policies_checked=["restricted_suppliers", "category_match", "geography_coverage",
@@ -721,6 +716,7 @@ def rank_suppliers_deterministically(
         request_id=order.request_id,
         method_used=RankingMethod.DETERMINISTIC,
         scoring_weights=weights,
+        currency=order.currency,
         k=5,
         ranking=ranking,
         excluded=excluded,
