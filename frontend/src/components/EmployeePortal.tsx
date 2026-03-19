@@ -155,7 +155,7 @@ export default function EmployeePortal({ onBack }: Props) {
         setTtsText(null);
         setTimeout(() => {
           voiceInputRef.current?.startListening();
-        }, 300);
+        }, 500);
       } else {
         // All fields filled — close overlay
         setOverlayPhase("closing");
