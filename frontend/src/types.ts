@@ -129,7 +129,7 @@ export interface OrderConfirmation {
 export interface SubmittedRequest {
   id: string;
   submitted_at: string;
-  status: "pending" | "processing" | "completed";
+  status: "pending" | "processing" | "completed" | "refused";
   request_text: string;
   quantity: number | null;
   unit_of_measure: string;

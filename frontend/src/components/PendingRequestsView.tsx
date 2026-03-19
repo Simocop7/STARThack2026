@@ -3,6 +3,7 @@ import type { SubmittedRequest, FormData } from "../types";
 
 interface Props {
   onProcess: (data: FormData, empRequestId: string) => void;
+  onRefuse: (empRequestId: string) => void;
   onNewManual: () => void;
 }
 
@@ -10,6 +11,7 @@ const STATUS_BADGE: Record<string, string> = {
   pending: "bg-amber-100 text-amber-800",
   processing: "bg-blue-100 text-blue-800",
   completed: "bg-green-100 text-green-800",
+  refused: "bg-red-100 text-red-800",
 };
 
 function formatDate(iso: string) {
@@ -19,7 +21,7 @@ function formatDate(iso: string) {
   });
 }
 
-export default function PendingRequestsView({ onProcess, onNewManual }: Props) {
+export default function PendingRequestsView({ onProcess, onRefuse, onNewManual }: Props) {
   const [requests, setRequests] = useState<SubmittedRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +52,14 @@ export default function PendingRequestsView({ onProcess, onNewManual }: Props) {
     );
     fetch(`/api/employee/requests/${req.id}/status?status=processing`, { method: "PATCH" }).catch(() => {});
     onProcess(formData, req.id);
+  }
+
+  function handleRefuse(req: SubmittedRequest) {
+    setRequests((prev) =>
+      prev.map((r) => (r.id === req.id ? { ...r, status: "refused" } : r))
+    );
+    fetch(`/api/employee/requests/${req.id}/status?status=refused`, { method: "PATCH" }).catch(() => {});
+    onRefuse(req.id);
   }
 
   return (
@@ -113,7 +123,8 @@ export default function PendingRequestsView({ onProcess, onNewManual }: Props) {
               {/* Status dot */}
               <div className={`mt-1 w-2.5 h-2.5 rounded-full flex-shrink-0 ${
                 req.status === "completed" ? "bg-green-500" :
-                req.status === "processing" ? "bg-blue-500" : "bg-amber-400"
+                req.status === "processing" ? "bg-blue-500" :
+                req.status === "refused" ? "bg-red-500" : "bg-amber-400"
               }`} />
 
               <div className="flex-1 min-w-0">
@@ -156,17 +167,30 @@ export default function PendingRequestsView({ onProcess, onNewManual }: Props) {
                 </div>
               </div>
 
-              {req.status !== "completed" && (
-                <button
-                  onClick={() => handleProcess(req)}
-                  className="flex-shrink-0 bg-indigo-600 text-white text-sm font-medium rounded-lg px-4 py-2 hover:bg-indigo-700 transition-colors"
-                >
-                  Process
-                </button>
+              {req.status !== "completed" && req.status !== "refused" && (
+                <div className="flex flex-shrink-0 gap-2">
+                  <button
+                    onClick={() => handleRefuse(req)}
+                    className="text-sm font-medium rounded-lg px-3 py-2 border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    Refuse
+                  </button>
+                  <button
+                    onClick={() => handleProcess(req)}
+                    className="bg-indigo-600 text-white text-sm font-medium rounded-lg px-4 py-2 hover:bg-indigo-700 transition-colors"
+                  >
+                    Process
+                  </button>
+                </div>
               )}
               {req.status === "completed" && (
                 <span className="flex-shrink-0 text-xs text-green-600 font-medium px-3 py-2">
                   Done
+                </span>
+              )}
+              {req.status === "refused" && (
+                <span className="flex-shrink-0 text-xs text-red-600 font-medium px-3 py-2">
+                  Refused
                 </span>
               )}
             </div>

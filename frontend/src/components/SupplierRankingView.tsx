@@ -114,11 +114,15 @@ function SupplierCard({
   currency,
   weights,
   onSelect,
+  isComparing,
+  onToggleCompare,
 }: {
   supplier: ScoredSupplier;
   currency: string;
   weights: { price: number; quality: number; risk: number; esg: number; lead_time: number };
   onSelect: (s: ScoredSupplier) => void;
+  isComparing: boolean;
+  onToggleCompare: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const sb = supplier.score_breakdown;
@@ -127,7 +131,8 @@ function SupplierCard({
   return (
     <div
       className={`border rounded-xl bg-white overflow-hidden transition-shadow hover:shadow-md ${
-        isTop ? "border-blue-300 shadow-blue-50 shadow-sm" : "border-gray-200"
+        isTop ? "border-blue-300 shadow-blue-50 shadow-sm" :
+        isComparing ? "border-indigo-300 shadow-indigo-50 shadow-sm" : "border-gray-200"
       }`}
     >
       {isTop && (
@@ -200,17 +205,37 @@ function SupplierCard({
         </p>
       </div>
 
-      {/* Select button */}
-      <div className="border-t border-gray-100 px-4 py-3">
+      {/* Action buttons */}
+      <div className="border-t border-gray-100 px-4 py-3 flex gap-2">
         <button
           onClick={() => onSelect(supplier)}
-          className={`w-full rounded-lg py-2.5 text-sm font-semibold transition-colors ${
+          className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors ${
             isTop
               ? "bg-blue-600 text-white hover:bg-blue-700"
               : "bg-gray-100 text-gray-700 hover:bg-gray-200"
           }`}
         >
           {isTop ? "✓ Select Recommended Supplier" : "Select this Supplier"}
+        </button>
+        <button
+          onClick={() => onToggleCompare(supplier.supplier_id)}
+          className={`rounded-lg px-3 py-2.5 text-sm font-medium transition-colors border ${
+            isComparing
+              ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+              : "bg-white border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-600"
+          }`}
+          title={isComparing ? "Remove from comparison" : "Add to comparison"}
+        >
+          {isComparing ? (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4" />
+              <rect x="3" y="3" width="18" height="18" rx="3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <rect x="3" y="3" width="18" height="18" rx="3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
         </button>
       </div>
 
@@ -261,11 +286,260 @@ function SupplierCard({
   );
 }
 
+// ── Comparison Panel ──────────────────────────────────────────────
+
+function ComparisonPanel({
+  suppliers,
+  currency,
+  onClose,
+  onSelect,
+}: {
+  suppliers: ScoredSupplier[];
+  currency: string;
+  onClose: () => void;
+  onSelect: (s: ScoredSupplier) => void;
+}) {
+  const scoreDims = [
+    { key: "price_score" as const, label: "Price", color: "bg-emerald-500" },
+    { key: "quality_score" as const, label: "Quality", color: "bg-blue-500" },
+    { key: "risk_score" as const, label: "Risk", color: "bg-amber-500" },
+    { key: "esg_score" as const, label: "ESG", color: "bg-green-500" },
+    { key: "lead_time_score" as const, label: "Lead Time", color: "bg-purple-500" },
+  ];
+
+  function bestOf(vals: number[], mode: "max" | "min") {
+    return mode === "max" ? Math.max(...vals) : Math.min(...vals);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-5xl max-h-[85vh] overflow-auto shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Compare Suppliers</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {suppliers.length} suppliers selected — side-by-side comparison
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="px-6 py-4">
+          {/* Comparison table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider py-3 pr-4 w-36">Attribute</th>
+                  {suppliers.map((s) => (
+                    <th key={s.supplier_id} className="text-center py-3 px-3 min-w-[160px]">
+                      <div className="flex flex-col items-center gap-1">
+                        <RankBadge rank={s.rank} />
+                        <span className="font-semibold text-gray-900 text-sm">{s.supplier_name}</span>
+                        <div className="flex gap-1 flex-wrap justify-center">
+                          {s.is_preferred && (
+                            <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">Preferred</span>
+                          )}
+                          {s.is_incumbent && (
+                            <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">Incumbent</span>
+                          )}
+                        </div>
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {/* Composite Score */}
+                <tr>
+                  <td className="py-3 pr-4 text-xs font-semibold text-gray-500">Composite Score</td>
+                  {suppliers.map((s) => {
+                    const pct = Math.round(s.composite_score * 100);
+                    const isBest = pct === Math.round(bestOf(suppliers.map((x) => x.composite_score), "max") * 100);
+                    return (
+                      <td key={s.supplier_id} className="text-center py-3 px-3">
+                        <span className={`text-lg font-bold ${isBest ? "text-green-600" : "text-gray-700"}`}>
+                          {pct}
+                        </span>
+                        <span className="text-xs text-gray-400"> / 100</span>
+                      </td>
+                    );
+                  })}
+                </tr>
+
+                {/* Unit Price */}
+                <tr>
+                  <td className="py-3 pr-4 text-xs font-semibold text-gray-500">Unit Price</td>
+                  {suppliers.map((s) => {
+                    const isBest = s.unit_price === bestOf(suppliers.map((x) => x.unit_price), "min");
+                    return (
+                      <td key={s.supplier_id} className={`text-center py-3 px-3 font-semibold ${isBest ? "text-green-600" : "text-gray-700"}`}>
+                        {fmt(s.unit_price, currency)}
+                      </td>
+                    );
+                  })}
+                </tr>
+
+                {/* Total Cost */}
+                <tr>
+                  <td className="py-3 pr-4 text-xs font-semibold text-gray-500">Total Cost</td>
+                  {suppliers.map((s) => {
+                    const isBest = s.total_price === bestOf(suppliers.map((x) => x.total_price), "min");
+                    return (
+                      <td key={s.supplier_id} className={`text-center py-3 px-3 font-semibold ${isBest ? "text-green-600" : "text-gray-700"}`}>
+                        {fmt(s.total_price, currency)}
+                      </td>
+                    );
+                  })}
+                </tr>
+
+                {/* Lead Time */}
+                <tr>
+                  <td className="py-3 pr-4 text-xs font-semibold text-gray-500">Standard Lead Time</td>
+                  {suppliers.map((s) => {
+                    const isBest = s.standard_lead_time_days === bestOf(suppliers.map((x) => x.standard_lead_time_days), "min");
+                    return (
+                      <td key={s.supplier_id} className={`text-center py-3 px-3 font-semibold ${isBest ? "text-green-600" : "text-gray-700"}`}>
+                        {s.standard_lead_time_days}d
+                        {s.expedited_lead_time_days && (
+                          <span className="text-xs text-gray-400 font-normal block">({s.expedited_lead_time_days}d exp.)</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+
+                {/* Expedited Pricing */}
+                <tr>
+                  <td className="py-3 pr-4 text-xs font-semibold text-gray-500">Expedited Total</td>
+                  {suppliers.map((s) => (
+                    <td key={s.supplier_id} className="text-center py-3 px-3 text-gray-700">
+                      {s.expedited_total_price ? (
+                        <span className="font-semibold">{fmt(s.expedited_total_price, currency)}</span>
+                      ) : (
+                        <span className="text-gray-300">N/A</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+
+                {/* Pricing Tier */}
+                <tr>
+                  <td className="py-3 pr-4 text-xs font-semibold text-gray-500">Pricing Tier</td>
+                  {suppliers.map((s) => (
+                    <td key={s.supplier_id} className="text-center py-3 px-3 text-xs text-gray-600">
+                      {s.pricing_tier_applied}
+                    </td>
+                  ))}
+                </tr>
+
+                {/* Lead Time Met */}
+                <tr>
+                  <td className="py-3 pr-4 text-xs font-semibold text-gray-500">Meets Lead Time</td>
+                  {suppliers.map((s) => (
+                    <td key={s.supplier_id} className="text-center py-3 px-3">
+                      {s.meets_lead_time ? (
+                        <span className="text-green-600 font-bold">✓ Yes</span>
+                      ) : (
+                        <span className="text-red-600 font-bold">✗ No</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+
+                {/* Score dimensions */}
+                {scoreDims.map(({ key, label, color }) => (
+                  <tr key={key}>
+                    <td className="py-3 pr-4 text-xs font-semibold text-gray-500">{label} Score</td>
+                    {suppliers.map((s) => {
+                      const val = Math.round(s.score_breakdown[key] * 100);
+                      const isBest = val === Math.round(bestOf(suppliers.map((x) => x.score_breakdown[key]), "max") * 100);
+                      return (
+                        <td key={s.supplier_id} className="py-3 px-3">
+                          <div className="flex items-center gap-2 justify-center">
+                            <div className="w-16 bg-gray-100 rounded-full h-2">
+                              <div className={`h-2 rounded-full ${color}`} style={{ width: `${val}%` }} />
+                            </div>
+                            <span className={`text-xs font-semibold w-8 ${isBest ? "text-green-600" : "text-gray-600"}`}>{val}</span>
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+
+                {/* Compliance summary */}
+                <tr>
+                  <td className="py-3 pr-4 text-xs font-semibold text-gray-500">Compliance</td>
+                  {suppliers.map((s) => {
+                    const pass = s.compliance_checks.filter((c) => c.result === "pass").length;
+                    const fail = s.compliance_checks.filter((c) => c.result === "fail").length;
+                    const warn = s.compliance_checks.filter((c) => c.result === "warning").length;
+                    return (
+                      <td key={s.supplier_id} className="text-center py-3 px-3 text-xs">
+                        <div className="flex items-center justify-center gap-2">
+                          {pass > 0 && <span className="text-green-600 font-medium">✓{pass}</span>}
+                          {warn > 0 && <span className="text-amber-600 font-medium">⚠{warn}</span>}
+                          {fail > 0 && <span className="text-red-600 font-medium">✗{fail}</span>}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+
+                {/* Recommendation note */}
+                <tr>
+                  <td className="py-3 pr-4 text-xs font-semibold text-gray-500 align-top">Rationale</td>
+                  {suppliers.map((s) => (
+                    <td key={s.supplier_id} className="py-3 px-3 text-xs text-gray-600 leading-relaxed align-top">
+                      {s.recommendation_note}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Select buttons */}
+          <div className="mt-4 flex gap-3 justify-center border-t border-gray-100 pt-4">
+            {suppliers.map((s) => (
+              <button
+                key={s.supplier_id}
+                onClick={() => { onSelect(s); onClose(); }}
+                className={`rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors ${
+                  s.rank === 1
+                    ? "bg-blue-600 text-white hover:bg-blue-700"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                Select {s.supplier_name}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────
 
 export default function SupplierRankingView({ result, onNewRequest, onSelectSupplier }: Props) {
   const [showExcluded, setShowExcluded] = useState(false);
   const [showWeights, setShowWeights] = useState(false);
+  const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
+  const [showCompare, setShowCompare] = useState(false);
 
   const currency = result.currency || "EUR";
   const blockingEscalations = result.escalations.filter((e) => e.blocking);
@@ -275,6 +549,17 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
   const cheapestTotal = result.ranking.length > 0
     ? Math.min(...result.ranking.map((s) => s.total_price))
     : null;
+
+  function toggleCompare(id: string) {
+    setCompareIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const comparedSuppliers = result.ranking.filter((s) => compareIds.has(s.supplier_id));
 
   return (
     <div className="space-y-5">
@@ -299,6 +584,43 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
           ← New request
         </button>
       </div>
+
+      {/* Comparison floating bar */}
+      {compareIds.size > 0 && (
+        <div className="sticky top-0 z-30 bg-indigo-600 text-white rounded-xl px-4 py-3 flex items-center justify-between shadow-lg">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium">
+              {compareIds.size} supplier{compareIds.size !== 1 ? "s" : ""} selected
+            </span>
+            <div className="flex gap-1.5">
+              {comparedSuppliers.map((s) => (
+                <span key={s.supplier_id} className="bg-white/20 rounded-full px-2 py-0.5 text-xs font-medium">
+                  {s.supplier_name}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCompareIds(new Set())}
+              className="text-xs text-white/70 hover:text-white underline"
+            >
+              Clear
+            </button>
+            <button
+              onClick={() => setShowCompare(true)}
+              disabled={compareIds.size < 2}
+              className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors ${
+                compareIds.size >= 2
+                  ? "bg-white text-indigo-700 hover:bg-indigo-50"
+                  : "bg-white/30 text-white/60 cursor-not-allowed"
+              }`}
+            >
+              Compare{compareIds.size < 2 ? " (select 2+)" : ""}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Blocking escalations — shown first so they're unmissable */}
       {blockingEscalations.length > 0 && (
@@ -409,6 +731,8 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
               currency={currency}
               weights={weights}
               onSelect={onSelectSupplier}
+              isComparing={compareIds.has(s.supplier_id)}
+              onToggleCompare={toggleCompare}
             />
           ))}
         </div>
@@ -473,6 +797,16 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
           <p className="text-xs text-gray-400 mt-2 italic">AI note: {result.llm_fallback_reason}</p>
         )}
       </div>
+
+      {/* Comparison modal */}
+      {showCompare && comparedSuppliers.length >= 2 && (
+        <ComparisonPanel
+          suppliers={comparedSuppliers}
+          currency={currency}
+          onClose={() => setShowCompare(false)}
+          onSelect={onSelectSupplier}
+        />
+      )}
     </div>
   );
 }
