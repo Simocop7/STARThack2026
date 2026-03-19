@@ -1,5 +1,69 @@
 @import "tailwindcss";
 
+/* ── Unified title system ─────────────────────────────────── */
+.app-title-primary {
+  font-size: 1.75rem;
+  line-height: 1.15;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: #111827;
+}
+
+.app-title-secondary {
+  font-size: 1.35rem;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: #111827;
+}
+
+.app-title-muted {
+  font-size: 1.1rem;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #1f2937;
+}
+
+@media (min-width: 768px) {
+  .app-title-primary {
+    font-size: 2rem;
+  }
+  .app-title-secondary {
+    font-size: 1.5rem;
+  }
+}
+
+/* ── Shimmer button animations ─────────────────────────────── */
+@keyframes spin-around {
+  0% {
+    transform: translateZ(0) rotate(0);
+  }
+  15%, 35% {
+    transform: translateZ(0) rotate(90deg);
+  }
+  65%, 85% {
+    transform: translateZ(0) rotate(270deg);
+  }
+  100% {
+    transform: translateZ(0) rotate(360deg);
+  }
+}
+
+@keyframes shimmer-slide {
+  to {
+    transform: translate(calc(100cqw - 100%), 0);
+  }
+}
+
+.animate-shimmer-slide {
+  animation: shimmer-slide var(--speed) ease-in-out infinite alternate;
+}
+
+.animate-spin-around {
+  animation: spin-around calc(var(--speed) * 2) infinite linear;
+}
+
 /* ── Voice Overlay Animations ─────────────────────────────── */
 
 /* Orb: listening state — volume-reactive via --volume custom property */

@@ -520,7 +520,7 @@ export default function EmployeePortal({ onBack }: Props) {
               </svg>
             </div>
             <div className="text-center max-w-md">
-              <h2 className="text-2xl font-semibold text-gray-900">Request Submitted!</h2>
+              <h2 className="app-title-primary">Request Submitted!</h2>
               <p className="mt-3 text-gray-600">
                 Your procurement request has been validated and sent to the procurement office for processing.
               </p>
@@ -568,7 +568,7 @@ export default function EmployeePortal({ onBack }: Props) {
             )}
 
             <div className="mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">New Procurement Request</h2>
+              <h2 className="app-title-secondary">New Procurement Request</h2>
               <p className="mt-1 text-sm text-gray-500">
                 Describe what you need in plain language. Your request will be validated before submission.
               </p>

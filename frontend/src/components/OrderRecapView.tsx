@@ -1,5 +1,6 @@
 import type { ScoredSupplier, RankedSupplierOutput, FormData } from "../types";
 import { PLATFORMS } from "./platforms";
+import { ShimmerButton } from "./ui/shimmer-button";
 
 interface Props {
   supplier: ScoredSupplier;
@@ -44,7 +45,7 @@ export default function OrderRecapView({ supplier, ranking, formData, deliveryCo
           </svg>
           Back to comparison
         </button>
-        <h2 className="text-2xl font-bold text-gray-900">Order Recap</h2>
+        <h2 className="app-title-primary">Order Recap</h2>
         <p className="text-sm text-gray-500 mt-0.5">Review every detail before sending the official order.</p>
       </div>
 
@@ -156,14 +157,11 @@ export default function OrderRecapView({ supplier, ranking, formData, deliveryCo
 
       {/* Action buttons */}
       <div className="space-y-3 pt-1 pb-6">
-        <button
+        <ShimmerButton
           onClick={onConfirm}
           disabled={loading}
-          className={`w-full rounded-2xl py-4 text-base font-bold tracking-wide transition-all shadow-lg ${
-            loading
-              ? "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none"
-              : "bg-blue-600 text-white hover:bg-blue-700 active:scale-[0.99] shadow-blue-200"
-          }`}
+          background={loading ? "rgb(156 163 175)" : "rgb(185 28 28)"}
+          className="w-full rounded-2xl py-4 text-base font-bold tracking-wide shadow-lg"
         >
           {loading ? (
             <span className="flex items-center justify-center gap-2">
@@ -176,7 +174,7 @@ export default function OrderRecapView({ supplier, ranking, formData, deliveryCo
           ) : (
             "✓ Send Official Order"
           )}
-        </button>
+        </ShimmerButton>
         <button
           onClick={onBack}
           disabled={loading}

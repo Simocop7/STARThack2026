@@ -1,5 +1,6 @@
 import { t } from "../i18n";
 import type { EnrichedRequest } from "../types";
+import { ShimmerButton } from "./ui/shimmer-button";
 
 interface Props {
   enrichedRequest: EnrichedRequest;
@@ -79,7 +80,7 @@ export default function EmployeeReviewStep({
             />
           </svg>
         </div>
-        <h2 className="text-xl font-semibold text-gray-900">{i.reviewTitle}</h2>
+        <h2 className="app-title-secondary">{i.reviewTitle}</h2>
         <p className="mt-1 text-sm text-gray-500">{i.reviewSubtitle}</p>
       </div>
 
@@ -148,18 +149,20 @@ export default function EmployeeReviewStep({
 
       {/* Actions */}
       <div className="flex gap-4">
-        <button
+        <ShimmerButton
           onClick={onEdit}
-          className="flex-1 border border-gray-300 text-gray-700 rounded-lg px-4 py-3 font-medium hover:bg-gray-50 transition-colors"
+          background="rgb(55 65 81)"
+          className="flex-1 rounded-lg px-4 py-3 font-medium"
         >
           {i.reviewEditRequest}
-        </button>
-        <button
+        </ShimmerButton>
+        <ShimmerButton
           onClick={onConfirm}
-          className="flex-1 bg-green-600 text-white rounded-lg px-4 py-3 font-medium hover:bg-green-700 transition-colors"
+          background="rgb(185 28 28)"
+          className="flex-1 rounded-lg px-4 py-3 font-medium"
         >
           {i.reviewConfirmSubmit}
-        </button>
+        </ShimmerButton>
       </div>
     </div>
   );

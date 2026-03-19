@@ -62,6 +62,18 @@ export default function ProcurementPortal({ onBack, externalPhase, onPhaseChange
   const voiceInputRef = useRef<VoiceInputHandle | null>(null);
   const i = t(language);
 
+  const refreshOrders = useCallback(async () => {
+    try {
+      const res = await fetch("/api/orders");
+      if (!res.ok) return;
+      const data = (await res.json()) as { orders?: OrderConfirmation[] };
+      if (!Array.isArray(data.orders)) return;
+      setOrders(data.orders);
+    } catch {
+      // Keep existing orders state if fetch fails.
+    }
+  }, []);
+
   // ── Sync external phase from sidebar ────────────────────────────
   useEffect(() => {
     if (!externalPhase || externalPhase === officePhase) return;
@@ -87,6 +99,14 @@ export default function ProcurementPortal({ onBack, externalPhase, onPhaseChange
   }, [externalPhase]);
 
   useEffect(() => { onPhaseChange?.(officePhase); }, [officePhase, onPhaseChange]);
+
+  useEffect(() => {
+    refreshOrders();
+  }, [refreshOrders]);
+
+  useEffect(() => {
+    if (officePhase === "orders") refreshOrders();
+  }, [officePhase, refreshOrders]);
 
   // ── Currency helper ──────────────────────────────────────────────
   function currencyForCountry(country: string): string {
@@ -293,6 +313,8 @@ export default function ProcurementPortal({ onBack, externalPhase, onPhaseChange
             body: JSON.stringify({ status: "completed" }),
           }).catch(() => {});
         }
+        // Re-sync persisted orders store.
+        refreshOrders();
       } else {
         setError("Failed to place order. Please try again.");
       }
@@ -385,7 +407,15 @@ export default function ProcurementPortal({ onBack, externalPhase, onPhaseChange
         {officePhase === "process" && (
           <>
             <div className="mb-6 flex items-center justify-between">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-6">
+                <div>
+                  <h2 className="app-title-secondary">Current Request</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    {activeEmpRequestId
+                      ? `Reviewing ${activeEmpRequestId}`
+                      : "Review and complete the request currently in progress."}
+                  </p>
+                </div>
                 {activeEmpRequestId && !orderConfirmation && (
                   <button
                     onClick={handleRefuseDuringProcessing}
@@ -471,7 +501,7 @@ export default function ProcurementPortal({ onBack, externalPhase, onPhaseChange
                   </svg>
                 </div>
                 <div className="text-center">
-                  <h2 className="text-2xl font-semibold text-red-800">{i.requestApproved}</h2>
+                  <h2 className="app-title-primary">{i.requestApproved}</h2>
                   <p className="mt-2 text-gray-600 max-w-lg">{i.approvedMessage}</p>
                 </div>
                 <button onClick={handleNewRequest} className="bg-red-600 text-white rounded-lg px-6 py-3 font-medium hover:bg-red-700 transition-colors">
@@ -497,6 +527,7 @@ export default function ProcurementPortal({ onBack, externalPhase, onPhaseChange
                   onVoiceModeChange={setVoiceMode}
                   voiceInputRef={voiceInputRef}
                   showDemoSelector={true}
+                  showVoiceWidget={false}
                   submitLabel={i.validateRequest}
                 />
               </>

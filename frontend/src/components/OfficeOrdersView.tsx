@@ -54,7 +54,7 @@ export default function OfficeOrdersView({ orders }: { orders: OrderConfirmation
       {/* Table section */}
       <div className="flex items-start justify-between gap-4 print:hidden">
         <div>
-          <h1 className="text-2xl font-black text-red-800">Orders</h1>
+          <h1 className="app-title-primary">Orders</h1>
           <p className="text-sm text-black/60 mt-1">{hint}</p>
         </div>
         <div className="text-sm font-semibold text-black/50">

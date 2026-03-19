@@ -208,7 +208,7 @@ export default function OfficePoliciesView() {
       <div>
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-black text-red-800">Policy</h1>
+            <h1 className="app-title-primary">Policy</h1>
             <p className="text-sm text-black/60 mt-1">
               Upload PDF policy documents and choose which policy aspects to respect.
             </p>

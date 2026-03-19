@@ -142,7 +142,7 @@ function SidebarContent({
       },
       {
         icon: <PenLine className="w-4 h-4" />,
-        label: "Write New Request",
+        label: "Current Request",
         active: isOffice && officeView === "process",
         onClick: () => onNavigate("office", "process"),
       },

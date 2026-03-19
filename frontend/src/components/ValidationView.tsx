@@ -1,6 +1,7 @@
 import { t } from "../i18n";
 import type { ValidationResult } from "../types";
 import IssueCard from "./IssueCard";
+import { ShimmerButton } from "./ui/shimmer-button";
 
 interface Props {
   result: ValidationResult;
@@ -141,9 +142,12 @@ export default function ValidationView({ result, onBack, lang }: Props) {
 
       {/* Confirm button */}
       {is_valid && (
-        <button className="w-full bg-green-600 text-white rounded-lg px-4 py-3 font-medium hover:bg-green-700 transition-colors">
+        <ShimmerButton
+          background="rgb(185 28 28)"
+          className="w-full rounded-lg px-4 py-3 font-medium"
+        >
           {i.confirmRequest}
-        </button>
+        </ShimmerButton>
       )}
 
       {!is_valid && user_message?.all_ok_message && (
@@ -151,9 +155,12 @@ export default function ValidationView({ result, onBack, lang }: Props) {
           <p className="text-sm text-gray-500 mb-3">
             {user_message.all_ok_message}
           </p>
-          <button className="bg-blue-600 text-white rounded-lg px-6 py-3 font-medium hover:bg-blue-700 transition-colors">
+          <ShimmerButton
+            background="rgb(185 28 28)"
+            className="rounded-lg px-6 py-3 font-medium"
+          >
             {i.acceptAllFixes}
-          </button>
+          </ShimmerButton>
         </div>
       )}
     </div>

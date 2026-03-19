@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2 } from "lucide-react";
 import type { RankedSupplierOutput, ScoredSupplier, Escalation, FormData } from "../types";
 import { PLATFORMS } from "./platforms";
 import { SupplierTable } from "./ui/supplier-table";
-import { useExpandable } from "../hooks/use-expandable";
+import { ShimmerButton } from "./ui/shimmer-button";
 
 interface Props {
   result: RankedSupplierOutput;
@@ -122,8 +122,11 @@ const FEATURES: FeatureMeta[] = [
     cardHeaderBg: "bg-purple-600",
     barColor: "bg-purple-500",
     sort: (s) => [...s].sort((a, b) => a.standard_lead_time_days - b.standard_lead_time_days),
-    value: (s) => `${s.standard_lead_time_days}d${s.expedited_lead_time_days ? ` / ${s.expedited_lead_time_days}d exp` : ""}`,
-    score: (s) => Math.round(s.score_breakdown.lead_time_score * 100),
+    value: (s) => `${s.standard_lead_time_days}d`,
+    score: (s) => {
+      const maxDays = 90;
+      return Math.max(0, Math.round((1 - s.standard_lead_time_days / maxDays) * 100));
+    },
   },
 ];
 
@@ -160,36 +163,35 @@ function EscalationCard({ esc }: { esc: Escalation }) {
   );
 }
 
-// ── Expandable Feature Card (adapted from expandable-card style) ─────
+// ── Supplier detail modal ────────────────────────────────────────────
 
-function FeatureCard({
+function SupplierDetailModal({
   supplier,
-  featureRank,
   feature,
   currency,
+  onClose,
   onSelect,
 }: {
   supplier: ScoredSupplier;
-  featureRank: number;
   feature: FeatureMeta;
   currency: string;
+  onClose: () => void;
   onSelect: (s: ScoredSupplier) => void;
 }) {
-  const { isExpanded, toggleExpand, animatedHeight } = useExpandable();
-  const contentRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (contentRef.current) {
-      animatedHeight.set(isExpanded ? contentRef.current.scrollHeight : 0);
-    }
-  }, [isExpanded, animatedHeight]);
-
-  const isFirst = featureRank === 1;
   const compositeScore = Math.round(supplier.composite_score * 100);
-  const featureScore = feature.score(supplier);
   const scoreColor =
     compositeScore >= 75 ? "text-green-600" :
     compositeScore >= 50 ? "text-amber-600" : "text-red-500";
+
+  const leadTimeScore = leadTimeDisplayScore(supplier);
+
+  const breakdownRows = [
+    { label: "Price",     val: Math.round(supplier.score_breakdown.price_score * 100), color: "bg-emerald-500" },
+    { label: "Quality",   val: supplier.raw_scores.quality,                            color: "bg-blue-500"    },
+    { label: "Trust",     val: 100 - supplier.raw_scores.risk,                         color: "bg-amber-500"   },
+    { label: "ESG",       val: supplier.raw_scores.esg,                                color: "bg-green-500"   },
+    { label: "Lead Time", val: leadTimeScore,                                          color: scoreBarColor(leadTimeScore), displayLabel: `${supplier.standard_lead_time_days}d` },
+  ];
 
   const tasks = supplier.compliance_checks.map((c) => ({
     title: c.rule_description,
@@ -197,21 +199,190 @@ function FeatureCard({
   }));
 
   return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-[90] flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+        className="relative z-10 w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl bg-white border border-gray-200 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-800 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        {/* Header */}
+        <div className="p-6 pb-4">
+          <div className="flex justify-between items-start pr-8">
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold text-gray-900">{supplier.supplier_name}</h3>
+              <p className="text-xs text-gray-400 font-mono">{supplier.supplier_id} · {fmtTier(supplier.pricing_tier_applied)}</p>
+              <div className="flex gap-1.5 flex-wrap">
+                {supplier.is_preferred && (
+                  <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-blue-50 text-blue-700 border-blue-200">Preferred</span>
+                )}
+                {supplier.is_incumbent && (
+                  <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-green-50 text-green-700 border-green-200">Incumbent</span>
+                )}
+                {!supplier.meets_lead_time && (
+                  <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-red-50 text-red-700 border-red-200">Lead time risk</span>
+                )}
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <p className={`text-3xl font-black ${scoreColor}`}>{compositeScore}%</p>
+              <p className="text-[10px] text-gray-400">overall</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Key metrics */}
+        <div className="px-6 pb-4">
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: "Unit price", val: fmt(supplier.unit_price, currency) },
+              { label: "Total cost", val: fmt(supplier.total_price, currency) },
+              { label: "Lead time", val: `${supplier.standard_lead_time_days}d${supplier.expedited_lead_time_days ? ` / ${supplier.expedited_lead_time_days}d` : ""}` },
+            ].map((item) => (
+              <div key={item.label} className="bg-gray-50 rounded-lg px-3 py-2.5">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">{item.label}</p>
+                <p className="text-sm font-bold text-gray-900 mt-0.5">{item.val}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Score breakdown */}
+        <div className="px-6 pb-4 space-y-2">
+          <h4 className="font-medium text-xs text-gray-500 uppercase tracking-wide">Score Breakdown</h4>
+          {breakdownRows.map((item) => (
+            <div key={item.label} className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 w-16 shrink-0">{item.label}</span>
+              <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${item.color}`}
+                  style={{ width: `${Math.min(100, Math.max(0, item.val))}%` }}
+                />
+              </div>
+              <span className="text-xs font-semibold text-gray-600 w-8 text-right">
+                {item.displayLabel ?? item.val}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Compliance */}
+        {tasks.length > 0 && (
+          <div className="px-6 pb-4 space-y-1.5">
+            <h4 className="font-medium text-xs text-gray-500 uppercase tracking-wide">Compliance Checks</h4>
+            {tasks.map((task, idx) => (
+              <div key={idx} className="flex items-center justify-between text-sm gap-2">
+                <span className="text-gray-600 text-xs leading-tight truncate">{task.title}</span>
+                {task.completed && <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Rationale */}
+        <div className="px-6 pb-4">
+          <div className="border-l-4 border-blue-400 pl-3 py-1">
+            <p className="text-xs text-gray-700 leading-relaxed">{supplier.recommendation_note}</p>
+          </div>
+        </div>
+
+        {/* Expedited */}
+        {supplier.expedited_unit_price && (
+          <div className="px-6 pb-4">
+            <div className="bg-amber-50 rounded-lg px-3 py-2 text-xs text-amber-700">
+              <span className="font-semibold">Expedited: </span>
+              {fmt(supplier.expedited_unit_price, currency)}/unit ·{" "}
+              <strong>{fmt(supplier.expedited_total_price ?? 0, currency)}</strong> ·{" "}
+              {supplier.expedited_lead_time_days}d · ~+8%
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
+          <ShimmerButton
+            onClick={() => onSelect(supplier)}
+            background="rgb(185 28 28)"
+            className="rounded-lg px-5 py-2.5 text-sm font-bold shadow-sm"
+          >
+            Select supplier
+          </ShimmerButton>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ── Feature Card (compact, click opens modal) ────────────────────────
+
+function scoreBarColor(val: number): string {
+  if (val >= 80) return "bg-green-500";
+  if (val >= 50) return "bg-amber-500";
+  return "bg-red-500";
+}
+
+function leadTimeDisplayScore(s: ScoredSupplier): number {
+  const maxDays = 90;
+  return Math.max(0, Math.round((1 - s.standard_lead_time_days / maxDays) * 100));
+}
+
+function FeatureCard({
+  supplier,
+  featureRank,
+  feature,
+  currency,
+  onSelect,
+  onOpenDetail,
+}: {
+  supplier: ScoredSupplier;
+  featureRank: number;
+  feature: FeatureMeta;
+  currency: string;
+  onSelect: (s: ScoredSupplier) => void;
+  onOpenDetail: (s: ScoredSupplier) => void;
+}) {
+  const isFirst = featureRank === 1;
+  const compositeScore = Math.round(supplier.composite_score * 100);
+  const featureScore = feature.score(supplier);
+  const scoreColor =
+    compositeScore >= 75 ? "text-green-600" :
+    compositeScore >= 50 ? "text-amber-600" : "text-red-500";
+
+  const ltScore = leadTimeDisplayScore(supplier);
+
+  return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
       transition={{ type: "spring", stiffness: 300, damping: 28, delay: featureRank * 0.07 }}
-      className={`w-full cursor-pointer transition-all duration-300 rounded-lg border bg-white shadow-sm hover:shadow-lg ${
+      className={`w-full transition-all duration-300 rounded-lg border bg-white shadow-sm hover:shadow-lg ${
         isFirst ? `border-2 ${feature.cardBorder}` : "border border-gray-200"
       }`}
-      onClick={toggleExpand}
     >
       {/* Card header */}
       <div className="flex flex-col space-y-1.5 p-5 pb-3">
         <div className="flex justify-between items-start w-full">
           <div className="space-y-2">
-            {/* Status badge */}
             <span
               className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
                 isFirst
@@ -223,41 +394,30 @@ function FeatureCard({
             >
               {isFirst ? feature.label : `#${featureRank} ${feature.label}`}
             </span>
-            <h3 className="text-xl font-semibold text-gray-900 leading-tight">
-              {supplier.supplier_name}
-            </h3>
-            <p className="text-xs text-gray-400 font-mono -mt-1">
-              {supplier.supplier_id} · {fmtTier(supplier.pricing_tier_applied)}
-            </p>
+            <h3 className="text-xl font-semibold text-gray-900 leading-tight">{supplier.supplier_name}</h3>
+            <p className="text-xs text-gray-400 font-mono -mt-1">{supplier.supplier_id} · {fmtTier(supplier.pricing_tier_applied)}</p>
             <div className="flex gap-1 flex-wrap">
               {supplier.is_preferred && (
-                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-blue-50 text-blue-700 border-blue-200">
-                  Preferred
-                </span>
+                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-blue-50 text-blue-700 border-blue-200">Preferred</span>
               )}
               {supplier.is_incumbent && (
-                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-green-50 text-green-700 border-green-200">
-                  Incumbent
-                </span>
+                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-green-50 text-green-700 border-green-200">Incumbent</span>
               )}
               {!supplier.meets_lead_time && (
-                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-red-50 text-red-700 border-red-200">
-                  Lead time risk
-                </span>
+                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-red-50 text-red-700 border-red-200">Lead time risk</span>
               )}
             </div>
           </div>
-          {/* Feature highlight value */}
           <div className="text-right shrink-0 ml-3">
-            <p className={`text-2xl font-black leading-none ${isFirst ? scoreColor : scoreColor}`}>
-              {featureScore}
+            <p className={`text-2xl font-black leading-none ${scoreColor}`}>
+              {feature.key === "speed" ? `${supplier.standard_lead_time_days}d` : featureScore}
             </p>
-            <p className="text-[10px] text-gray-400 mt-0.5">{feature.label.toLowerCase()}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">{feature.key === "speed" ? "delivery" : feature.label.toLowerCase()}</p>
           </div>
         </div>
       </div>
 
-      {/* Progress bar + composite score */}
+      {/* Overall score bar */}
       <div className="px-5 pb-3">
         <div className="space-y-1.5">
           <div className="flex justify-between text-xs text-gray-500">
@@ -265,123 +425,70 @@ function FeatureCard({
             <span className={`font-semibold ${scoreColor}`}>{compositeScore}%</span>
           </div>
           <div className="relative h-2 w-full overflow-hidden rounded-full bg-gray-100">
-            <div
-              className={`h-full rounded-full transition-all ${feature.barColor}`}
-              style={{ width: `${compositeScore}%` }}
-            />
+            <div className={`h-full rounded-full transition-all ${feature.barColor}`} style={{ width: `${compositeScore}%` }} />
           </div>
         </div>
       </div>
 
-      {/* Expandable section */}
-      <div className="px-5 pb-0">
-        <motion.div
-          style={{ height: animatedHeight }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="overflow-hidden"
-        >
-          <div ref={contentRef}>
-            <AnimatePresence>
-              {isExpanded && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="space-y-4 pt-1 pb-4"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {/* Key metrics grid */}
-                  <div className="grid grid-cols-3 gap-2 text-sm">
-                    {[
-                      { label: "Unit price", val: fmt(supplier.unit_price, currency) },
-                      { label: "Total cost",  val: fmt(supplier.total_price, currency)  },
-                      { label: "Lead time",  val: `${supplier.standard_lead_time_days}d${supplier.expedited_lead_time_days ? ` / ${supplier.expedited_lead_time_days}d` : ""}` },
-                    ].map((item) => (
-                      <div key={item.label} className="bg-gray-50 rounded-lg px-3 py-2">
-                        <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">{item.label}</p>
-                        <p className="text-sm font-bold text-gray-900 mt-0.5">{item.val}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Score breakdown bars */}
-                  <div className="space-y-1.5">
-                    <h4 className="font-medium text-xs text-gray-500 uppercase tracking-wide">Score Breakdown</h4>
-                    {[
-                      { label: "Price",     val: Math.round(supplier.score_breakdown.price_score * 100),     color: "bg-emerald-500" },
-                      { label: "Quality",   val: supplier.raw_scores.quality,                                color: "bg-blue-500"    },
-                      { label: "Trust",     val: 100 - supplier.raw_scores.risk,                             color: "bg-amber-500"   },
-                      { label: "ESG",       val: supplier.raw_scores.esg,                                    color: "bg-green-500"   },
-                      { label: "Lead Time", val: Math.round(supplier.score_breakdown.lead_time_score * 100), color: "bg-purple-500"  },
-                    ].map((item) => (
-                      <div key={item.label} className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500 w-16 shrink-0">{item.label}</span>
-                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${item.color}`}
-                            style={{ width: `${Math.min(100, Math.max(0, item.val))}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-semibold text-gray-600 w-7 text-right">{item.val}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Compliance tasks */}
-                  {tasks.length > 0 && (
-                    <div className="space-y-1.5">
-                      <h4 className="font-medium text-xs text-gray-500 uppercase tracking-wide">
-                        Compliance Checks
-                      </h4>
-                      {tasks.map((task, idx) => (
-                        <div key={idx} className="flex items-center justify-between text-sm gap-2">
-                          <span className="text-gray-600 text-xs leading-tight truncate">{task.title}</span>
-                          {task.completed && <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Rationale */}
-                  <div className="border-l-4 border-blue-400 pl-3 py-0.5">
-                    <p className="text-xs text-gray-700 leading-relaxed">{supplier.recommendation_note}</p>
-                  </div>
-
-                  {/* Expedited */}
-                  {supplier.expedited_unit_price && (
-                    <div className="bg-amber-50 rounded-lg px-3 py-2 text-xs text-amber-700">
-                      <span className="font-semibold">Expedited: </span>
-                      {fmt(supplier.expedited_unit_price, currency)}/unit ·{" "}
-                      <strong>{fmt(supplier.expedited_total_price ?? 0, currency)}</strong> ·{" "}
-                      {supplier.expedited_lead_time_days}d · ≈+8%
-                    </div>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
+      {/* Quick metrics row */}
+      <div className="px-5 pb-3">
+        <div className="grid grid-cols-3 gap-2 text-sm">
+          <div className="bg-gray-50 rounded-lg px-2.5 py-1.5">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Unit price</p>
+            <p className="text-sm font-bold text-gray-900">{fmt(supplier.unit_price, currency)}</p>
           </div>
-        </motion.div>
+          <div className="bg-gray-50 rounded-lg px-2.5 py-1.5">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Total cost</p>
+            <p className="text-sm font-bold text-gray-900">{fmt(supplier.total_price, currency)}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg px-2.5 py-1.5">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Lead time</p>
+            <p className="text-sm font-bold text-gray-900">
+              {supplier.standard_lead_time_days}d
+              {supplier.expedited_lead_time_days ? ` / ${supplier.expedited_lead_time_days}d` : ""}
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Card footer */}
+      {/* Mini score bars */}
+      <div className="px-5 pb-3 space-y-1">
+        {[
+          { label: "Price",     val: Math.round(supplier.score_breakdown.price_score * 100), color: "bg-emerald-500", display: undefined as string | undefined },
+          { label: "Quality",   val: supplier.raw_scores.quality,                            color: "bg-blue-500",    display: undefined as string | undefined },
+          { label: "Trust",     val: 100 - supplier.raw_scores.risk,                         color: "bg-amber-500",   display: undefined as string | undefined },
+          { label: "ESG",       val: supplier.raw_scores.esg,                                color: "bg-green-500",   display: undefined as string | undefined },
+          { label: "Lead Time", val: ltScore,                                                color: scoreBarColor(ltScore), display: `${supplier.standard_lead_time_days}d` },
+        ].map((item) => (
+          <div key={item.label} className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-500 w-14 shrink-0">{item.label}</span>
+            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full ${item.color}`} style={{ width: `${Math.min(100, Math.max(0, item.val))}%` }} />
+            </div>
+            <span className="text-[10px] font-semibold text-gray-500 w-7 text-right">{item.display ?? item.val}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Footer */}
       <div className="flex items-center p-5 pt-0 border-t border-gray-100 mt-2">
         <div className="flex items-center justify-between w-full gap-3">
-          <span className="text-xs text-gray-500 truncate">
-            {isExpanded ? "Click to collapse" : "Click to see details"}
-          </span>
           <button
+            onClick={() => onOpenDetail(supplier)}
+            className="text-xs text-gray-500 hover:text-gray-800 underline transition-colors"
+          >
+            Click to see details
+          </button>
+          <ShimmerButton
             onClick={(e) => {
               e.stopPropagation();
               onSelect(supplier);
             }}
-            className={`shrink-0 rounded-lg px-4 py-2 text-xs font-bold transition-all active:scale-[0.98] ${
-              isFirst
-                ? `${feature.activeBg} text-white hover:opacity-90 shadow-sm`
-                : "bg-gray-900 text-white hover:bg-gray-800"
-            }`}
+            background={isFirst ? "rgb(185 28 28)" : "rgb(17 24 39)"}
+            className="shrink-0 rounded-lg px-4 py-2 text-xs font-bold shadow-sm"
           >
             Select supplier
-          </button>
+          </ShimmerButton>
         </div>
       </div>
     </motion.div>
@@ -558,6 +665,7 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
   const [activeFeature, setActiveFeature] = useState<FeatureKey>("price");
   const [showExcluded, setShowExcluded] = useState(false);
   const [showPolicyIssues, setShowPolicyIssues] = useState(false);
+  const [detailSupplier, setDetailSupplier] = useState<ScoredSupplier | null>(null);
 
   const currency = result.currency || "EUR";
   const blockingEscalations = result.escalations.filter((e) => e.blocking);
@@ -583,7 +691,7 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <h2 className="text-xl font-semibold text-gray-900">Supplier Ranking</h2>
+            <h2 className="app-title-secondary">Supplier Ranking</h2>
             <MethodBadge method={result.method_used} />
           </div>
           <p className="text-sm text-gray-500">
@@ -610,6 +718,19 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
           </button>
         </div>
       </div>
+
+      {/* ── Supplier detail modal ── */}
+      <AnimatePresence>
+        {detailSupplier && (
+          <SupplierDetailModal
+            supplier={detailSupplier}
+            feature={currentFeature}
+            currency={currency}
+            onClose={() => setDetailSupplier(null)}
+            onSelect={(s) => { setDetailSupplier(null); onSelectSupplier(s); }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* ── Policy issues modal ── */}
       {showPolicyIssues && hasPolicyIssues && (
@@ -768,6 +889,7 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
                   feature={currentFeature}
                   currency={currency}
                   onSelect={onSelectSupplier}
+                  onOpenDetail={setDetailSupplier}
                 />
               ))}
             </motion.div>
@@ -781,7 +903,7 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
           <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl">Search</span>
           </div>
-          <h3 className="text-gray-700 font-semibold">No suppliers found</h3>
+          <h3 className="app-title-muted">No suppliers found</h3>
           <p className="text-sm text-gray-400 mt-1 max-w-xs mx-auto">
             All candidates were excluded by hard policy filters. Open <span className="font-semibold">Errors & escalations</span> for details.
           </p>

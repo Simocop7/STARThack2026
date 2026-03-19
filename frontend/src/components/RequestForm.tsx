@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import type { FormData } from "../types";
 import VoiceInput, { type VoiceInputHandle } from "./VoiceInput";
+import { ShimmerButton } from "./ui/shimmer-button";
 
 
 const LANGUAGES = [
@@ -46,6 +47,8 @@ interface Props {
   onEmptyEnd?: () => void;
   /** Called when voice parsing fails (network/auth/server error) */
   onVoiceParseError?: (message: string) => void;
+  /** Show voice widget and voice parsing flow (default: true) */
+  showVoiceWidget?: boolean;
 }
 
 const VALID_COUNTRY_CODES: Record<string, string> = {
@@ -174,6 +177,7 @@ export default function RequestForm({
   onListeningChange,
   onEmptyEnd,
   onVoiceParseError,
+  showVoiceWidget = true,
 }: Props) {
   const [form, setForm] = useState<FormData>(
     initialData ?? {
@@ -686,7 +690,7 @@ export default function RequestForm({
           </div>
         </div>
 
-        <div className="lg:col-span-5 space-y-6">
+        <div className={`lg:col-span-5 space-y-6 ${showDemoSelector ? "lg:pt-14" : ""}`}>
           <div className="rounded-2xl border border-gray-200 bg-white p-5">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               {i.requestDescription}
@@ -702,81 +706,84 @@ export default function RequestForm({
             <p className="mt-2 text-xs text-gray-500">{i.categoryAutoDetectHint}</p>
           </div>
 
-          <div className="bg-gradient-to-r from-red-50 via-white to-red-50 border border-red-200 rounded-xl p-5">
-            <div className="mb-3">
-              <label className="block text-sm font-semibold text-red-900">
-                {i.voiceInputLabel}
-              </label>
-              <p className="text-xs text-gray-500 mt-0.5">{i.voiceInputHint}</p>
+          {showVoiceWidget && (
+            <div className="bg-gradient-to-r from-red-50 via-white to-red-50 border border-red-200 rounded-xl p-5">
+              <div className="mb-3">
+                <label className="block text-sm font-semibold text-red-900">
+                  {i.voiceInputLabel}
+                </label>
+                <p className="text-xs text-gray-500 mt-0.5">{i.voiceInputHint}</p>
+              </div>
+
+              {/* Origin voice activation button (kept during merge conflict resolution) */}
+              {onActivateVoiceOverlay && (
+                <div className={voiceParsing ? "pointer-events-none opacity-70" : undefined}>
+                  <button
+                    type="button"
+                    onClick={onActivateVoiceOverlay}
+                    disabled={voiceParsing}
+                    className="relative flex items-center gap-2 px-5 py-3 rounded-full font-medium text-sm
+                      bg-gradient-to-r from-red-600 via-red-700 to-red-800 text-white
+                      hover:from-red-500 hover:via-red-600 hover:to-red-700
+                      shadow-lg shadow-red-200 hover:shadow-xl hover:shadow-red-300
+                      transition-all
+                      disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    </svg>
+                    Voice Mode
+                  </button>
+                </div>
+              )}
+
+              {/* Hidden VoiceInput — imperative ref still works for overlay */}
+              <VoiceInput
+                ref={effectiveVoiceRef}
+                language={form.language}
+                onTranscript={handleVoiceTranscript}
+                onParsing={setVoiceParsing}
+                disabled={voiceParsing}
+                hidden
+                onInterimChange={onInterimTranscriptChange}
+                autoStopOnSilence={overlayActive}
+                onListeningChange={onListeningChange}
+                onEmptyEnd={onEmptyEnd}
+              />
+
+              {voiceParsing && !overlayActive && (
+                <div className="mt-3 flex items-center gap-2 text-sm text-red-700">
+                  <div className="w-4 h-4 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
+                  {i.voiceParsing}
+                </div>
+              )}
+
+              {voiceError && !overlayActive && (
+                <div className="mt-2 text-sm text-red-600">{voiceError}</div>
+              )}
+
+              {missingFields.length > 0 && !voiceMode && !overlayActive && (
+                <div className="mt-3 bg-red-50 border border-red-200 rounded-md p-3">
+                  <p className="text-sm font-medium text-red-800">{i.voiceMissingFields}</p>
+                  <ul className="mt-1 text-xs text-red-700 list-disc list-inside">
+                    {missingFields.map((field) => (
+                      <li key={field}>{field}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
-
-            {/* AI voice activation button */}
-            {onActivateVoiceOverlay && (
-              <div className={voiceParsing ? "pointer-events-none opacity-70" : undefined}>
-                <button
-                  type="button"
-                  onClick={onActivateVoiceOverlay}
-                  disabled={voiceParsing}
-                  className="relative flex items-center gap-2 px-5 py-3 rounded-full font-medium text-sm
-                    bg-gradient-to-r from-red-600 via-red-700 to-red-800 text-white
-                    hover:from-red-500 hover:via-red-600 hover:to-red-700
-                    shadow-lg shadow-red-200 hover:shadow-xl hover:shadow-red-300
-                    transition-all
-                    disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                  </svg>
-                  Voice Mode
-                </button>
-              </div>
-            )}
-
-            {/* Hidden VoiceInput — imperative ref still works for overlay */}
-            <VoiceInput
-              ref={effectiveVoiceRef}
-              language={form.language}
-              onTranscript={handleVoiceTranscript}
-              onParsing={setVoiceParsing}
-              disabled={voiceParsing}
-              hidden
-              onInterimChange={onInterimTranscriptChange}
-              autoStopOnSilence={overlayActive}
-              onListeningChange={onListeningChange}
-              onEmptyEnd={onEmptyEnd}
-            />
-
-            {voiceParsing && !overlayActive && (
-              <div className="mt-3 flex items-center gap-2 text-sm text-red-700">
-                <div className="w-4 h-4 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
-                {i.voiceParsing}
-              </div>
-            )}
-
-            {voiceError && !overlayActive && (
-              <div className="mt-2 text-sm text-red-600">{voiceError}</div>
-            )}
-
-            {missingFields.length > 0 && !voiceMode && !overlayActive && (
-              <div className="mt-3 bg-red-50 border border-red-200 rounded-md p-3">
-                <p className="text-sm font-medium text-red-800">{i.voiceMissingFields}</p>
-                <ul className="mt-1 text-xs text-red-700 list-disc list-inside">
-                  {missingFields.map((field) => (
-                    <li key={field}>{field}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
-      <button
+      <ShimmerButton
         type="submit"
-        className="w-full bg-red-600 text-white rounded-lg px-4 py-3 font-medium hover:bg-red-700 transition-colors"
+        background="rgb(185 28 28)"
+        className="w-full rounded-lg px-4 py-3 font-medium hover:opacity-95"
       >
         {submitLabel ?? i.validateRequest}
-      </button>
+      </ShimmerButton>
     </form>
   );
 }

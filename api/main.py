@@ -477,6 +477,8 @@ async def rank_suppliers_custom(
 
 _employee_requests: list[dict] = []
 _MAX_EMPLOYEE_REQUESTS = 10_000
+_orders: list[OrderConfirmation] = []
+_MAX_ORDERS = 10_000
 
 
 class EmployeeFormInput(BaseModel):
@@ -582,6 +584,12 @@ async def update_employee_request_status(emp_id: str, body: StatusUpdate) -> dic
 # ── Order Placement ─────────────────────────────────────────────────────
 
 
+@app.get("/api/orders", dependencies=[Depends(verify_api_key)])
+async def get_orders() -> dict:
+    """Return all placed orders (newest first)."""
+    return {"orders": [o.model_dump(mode="json") for o in reversed(_orders)]}
+
+
 @app.post(
     "/api/order",
     response_model=OrderConfirmation,
@@ -607,7 +615,7 @@ async def place_order(order: OrderRequest) -> OrderConfirmation:
 
     status = "pending_approval" if approval_required else "submitted"
 
-    return OrderConfirmation(
+    confirmation = OrderConfirmation(
         order_id=order_id,
         request_id=order.request_id,
         placed_at=placed_at,
@@ -631,6 +639,12 @@ async def place_order(order: OrderRequest) -> OrderConfirmation:
         notes=order.notes,
         next_steps=next_steps,
     )
+
+    _orders.append(confirmation)
+    if len(_orders) > _MAX_ORDERS:
+        _orders[:] = _orders[-_MAX_ORDERS:]
+
+    return confirmation
 
 
 # ---------------------------------------------------------------------------
