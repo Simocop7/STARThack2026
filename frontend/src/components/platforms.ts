@@ -1,0 +1,42 @@
+export const PLATFORMS = [
+  {
+    name: "SAP Ariba",
+    description: "Supplier discovery & sourcing events",
+    icon: "🔷",
+    url: "https://service.ariba.com/Supplier.aw/109537048/aw?awh=r&awssk=YV_gM3EE&dard=1",
+    color: "hover:border-blue-300 hover:bg-blue-50",
+    labelColor: "text-blue-700",
+  },
+  {
+    name: "Coupa",
+    description: "Procurement & supplier management",
+    icon: "🟠",
+    url: "https://supplier.coupahost.com/sessions/new",
+    color: "hover:border-orange-300 hover:bg-orange-50",
+    labelColor: "text-orange-700",
+  },
+  {
+    name: "Archlet",
+    description: "Sourcing optimisation & analytics",
+    icon: "🟣",
+    url: "https://www.archlet.io/",
+    color: "hover:border-purple-300 hover:bg-purple-50",
+    labelColor: "text-purple-700",
+  },
+  {
+    name: "Apadua",
+    description: "Strategic category management",
+    icon: "🟢",
+    url: "https://apadua.com/",
+    color: "hover:border-green-300 hover:bg-green-50",
+    labelColor: "text-green-700",
+  },
+  {
+    name: "Keelvar",
+    description: "AI-powered sourcing automation",
+    icon: "🔵",
+    url: "https://www.keelvar.com/",
+    color: "hover:border-cyan-300 hover:bg-cyan-50",
+    labelColor: "text-cyan-700",
+  },
+];

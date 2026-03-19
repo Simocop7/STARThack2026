@@ -3,35 +3,40 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import re
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime as dt, timezone
+from datetime import datetime as dt
+from datetime import timezone
 from typing import AsyncIterator
 
 from dotenv import load_dotenv
-load_dotenv()
-
-import logging
-
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
-
 from pydantic import BaseModel, Field, field_validator
-
-logger = logging.getLogger(__name__)
 
 from api.data_loader import DataStore
 from api.elevenlabs_client import get_elevenlabs_client
 from api.models import FormInput, ValidationResult
 from api.pipeline import process_request
-from api.voice_parser import parse_voice_transcript
-from api.ranking_models import CleanOrderRecap, RankedSupplierOutput, ScoringWeights, OrderRequest, OrderConfirmation
+from api.ranking_models import (
+    CleanOrderRecap,
+    OrderConfirmation,
+    OrderRequest,
+    RankedSupplierOutput,
+    ScoringWeights,
+)
 from api.ranking_orchestrator import get_top_5_suppliers
+from api.voice_parser import parse_voice_transcript
+
+load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -41,6 +46,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     client = get_elevenlabs_client()
     if client is not None:
         await client.close()
+
 
 app = FastAPI(title="Smart Procurement Validator", version="0.1.0", lifespan=lifespan)
 
@@ -56,7 +62,14 @@ _rate_limit_lock = asyncio.Lock()
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    if request.url.path in ("/api/validate", "/api/tts", "/api/parse-voice", "/api/rank", "/api/rank/custom-weights", "/api/order"):
+    if request.url.path in (
+        "/api/validate",
+        "/api/tts",
+        "/api/parse-voice",
+        "/api/rank",
+        "/api/rank/custom-weights",
+        "/api/order",
+    ):
         client_ip = request.client.host if request.client else "unknown"
         now = time.time()
         window_start = now - _RATE_LIMIT_WINDOW_SECONDS
@@ -78,18 +91,14 @@ async def rate_limit_middleware(request: Request, call_next):
 
             # Evict stale IPs when the dict grows too large
             if len(_request_log) > _MAX_TRACKED_IPS:
-                stale_ips = [
-                    ip for ip, ts in _request_log.items()
-                    if not ts or ts[-1] <= window_start
-                ]
+                stale_ips = [ip for ip, ts in _request_log.items() if not ts or ts[-1] <= window_start]
                 for ip in stale_ips:
                     del _request_log[ip]
 
     return await call_next(request)
 
-_allowed_origins = os.environ.get(
-    "CORS_ORIGINS", "http://localhost:5173"
-).split(",")
+
+_allowed_origins = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
 
 app.add_middleware(
     CORSMiddleware,
@@ -120,7 +129,11 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
-@app.post("/api/validate", response_model=ValidationResult, dependencies=[Depends(verify_api_key)])
+@app.post(
+    "/api/validate",
+    response_model=ValidationResult,
+    dependencies=[Depends(verify_api_key)],
+)
 async def validate_request(form: FormInput) -> ValidationResult:
     return await process_request(form)
 
@@ -147,10 +160,12 @@ async def search_suppliers(q: str = "", category_l1: str = "", category_l2: str 
         if q and q.lower() not in s["supplier_name"].lower():
             continue
         seen.add(s["supplier_id"])
-        results.append({
-            "supplier_id": s["supplier_id"],
-            "supplier_name": s["supplier_name"],
-        })
+        results.append(
+            {
+                "supplier_id": s["supplier_id"],
+                "supplier_name": s["supplier_name"],
+            }
+        )
 
     return {"suppliers": results[:20]}
 
@@ -237,7 +252,11 @@ async def get_request(request_id: str) -> dict:
 # ── Supplier Ranking ───────────────────────────────────────────────
 
 
-@app.post("/api/rank", response_model=RankedSupplierOutput, dependencies=[Depends(verify_api_key)])
+@app.post(
+    "/api/rank",
+    response_model=RankedSupplierOutput,
+    dependencies=[Depends(verify_api_key)],
+)
 async def rank_suppliers(
     order: CleanOrderRecap,
     force_llm: bool = False,
@@ -250,7 +269,11 @@ async def rank_suppliers(
     return await get_top_5_suppliers(order, force_llm=force_llm)
 
 
-@app.post("/api/rank/custom-weights", response_model=RankedSupplierOutput, dependencies=[Depends(verify_api_key)])
+@app.post(
+    "/api/rank/custom-weights",
+    response_model=RankedSupplierOutput,
+    dependencies=[Depends(verify_api_key)],
+)
 async def rank_suppliers_custom(
     order: CleanOrderRecap,
     weights: ScoringWeights,
@@ -326,7 +349,12 @@ async def update_employee_request_status(emp_id: str, status: str) -> dict:
 
 # ── Order Placement ─────────────────────────────────────────────────────
 
-@app.post("/api/order", response_model=OrderConfirmation, dependencies=[Depends(verify_api_key)])
+
+@app.post(
+    "/api/order",
+    response_model=OrderConfirmation,
+    dependencies=[Depends(verify_api_key)],
+)
 async def place_order(order: OrderRequest) -> OrderConfirmation:
     """Record the procurement office's supplier selection and return a receipt."""
 
@@ -339,16 +367,10 @@ async def place_order(order: OrderRequest) -> OrderConfirmation:
     if approval_required:
         next_steps.append(f"Obtain approval per threshold {order.approval_threshold_id}.")
     if order.quotes_required and order.quotes_required > 1:
-        next_steps.append(
-            f"Collect {order.quotes_required} competitive quote(s) before award."
-        )
-    next_steps.append(
-        f"Issue purchase order to {order.selected_supplier_name} referencing {order_id}."
-    )
+        next_steps.append(f"Collect {order.quotes_required} competitive quote(s) before award.")
+    next_steps.append(f"Issue purchase order to {order.selected_supplier_name} referencing {order_id}.")
     if order.required_by_date:
-        next_steps.append(
-            f"Confirm delivery commitment for {order.required_by_date.isoformat()} with supplier."
-        )
+        next_steps.append(f"Confirm delivery commitment for {order.required_by_date.isoformat()} with supplier.")
     next_steps.append("Archive this confirmation and supplier ranking output for audit.")
 
     status = "pending_approval" if approval_required else "submitted"

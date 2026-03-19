@@ -33,6 +33,20 @@ def check_completeness(enriched: EnrichedRequest) -> list[ValidationIssue]:
                 )
             )
 
+    # Conditionally require unit_of_measure when LLM says it's needed
+    if enriched.unit_of_measure_required and not enriched.unit_of_measure:
+        counter += 1
+        issues.append(
+            ValidationIssue(
+                issue_id=f"COMP-{counter:03d}",
+                severity=Severity.HIGH,
+                type=IssueType.MISSING_INFO,
+                description="Unit of measure is required for this type of item (e.g. kg, liters, meters) but was not provided.",
+                proposed_fix="Please specify the unit of measure for the requested items.",
+                fix_action=FixAction(field="unit_of_measure"),
+            )
+        )
+
     if enriched.quantity is not None and enriched.quantity < 0:
         counter += 1
         issues.append(

@@ -18,7 +18,8 @@ class ElevenLabsClient:
     MODEL_ID = "eleven_multilingual_v2"
 
     # Default voice (Rachel — clear, professional, multilingual)
-    DEFAULT_VOICE_ID = "UaYTS0wayjmO9KD1LR4R"
+    # DEFAULT_VOICE_ID = "KLON7Nwan8mJxpF2R8Yw"
+    DEFAULT_VOICE_ID = "MzqUf1HbJ8UmQ0wUsx2p"
 
     def __init__(self, api_key: str) -> None:
         self._api_key = api_key

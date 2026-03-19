@@ -14,8 +14,7 @@ def get_azure_client() -> AsyncAzureOpenAI:
     endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
     if not api_key or not endpoint:
         raise RuntimeError(
-            "Missing required environment variables: "
-            "AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT must be set."
+            "Missing required environment variables: AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT must be set."
         )
     return AsyncAzureOpenAI(
         api_key=api_key,

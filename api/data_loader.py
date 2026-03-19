@@ -24,6 +24,7 @@ def _read_json(filename: str) -> Any:
 # Categories
 # ---------------------------------------------------------------------------
 
+
 def load_categories() -> list[dict[str, str]]:
     """Return category taxonomy rows as-is."""
     return _read_csv("categories.csv")
@@ -40,6 +41,7 @@ def build_category_index(categories: list[dict]) -> dict[str, list[str]]:
 # ---------------------------------------------------------------------------
 # Suppliers
 # ---------------------------------------------------------------------------
+
 
 def load_suppliers() -> list[dict[str, Any]]:
     return [
@@ -60,10 +62,7 @@ def load_suppliers() -> list[dict[str, Any]]:
 
 def build_supplier_by_key(suppliers: list[dict]) -> dict[tuple[str, str, str], dict]:
     """Index by (supplier_id, category_l1, category_l2)."""
-    return {
-        (s["supplier_id"], s["category_l1"], s["category_l2"]): s
-        for s in suppliers
-    }
+    return {(s["supplier_id"], s["category_l1"], s["category_l2"]): s for s in suppliers}
 
 
 def build_supplier_by_name(suppliers: list[dict]) -> dict[str, str]:
@@ -71,7 +70,9 @@ def build_supplier_by_name(suppliers: list[dict]) -> dict[str, str]:
     return {s["supplier_name"].lower(): s["supplier_id"] for s in suppliers}
 
 
-def build_suppliers_by_category(suppliers: list[dict]) -> dict[tuple[str, str], list[dict]]:
+def build_suppliers_by_category(
+    suppliers: list[dict],
+) -> dict[tuple[str, str], list[dict]]:
     """Index by (category_l1, category_l2) -> list of supplier rows."""
     index: dict[tuple[str, str], list[dict]] = {}
     for s in suppliers:
@@ -83,6 +84,7 @@ def build_suppliers_by_category(suppliers: list[dict]) -> dict[tuple[str, str], 
 # ---------------------------------------------------------------------------
 # Pricing
 # ---------------------------------------------------------------------------
+
 
 def load_pricing() -> list[dict[str, Any]]:
     return [
@@ -106,7 +108,12 @@ def build_pricing_index(
     """Index by (supplier_id, category_l1, category_l2, region) -> sorted tier list."""
     index: dict[tuple[str, str, str, str], list[dict]] = {}
     for row in pricing:
-        key = (row["supplier_id"], row["category_l1"], row["category_l2"], row["region"])
+        key = (
+            row["supplier_id"],
+            row["category_l1"],
+            row["category_l2"],
+            row["region"],
+        )
         index.setdefault(key, []).append(row)
     for tiers in index.values():
         tiers.sort(key=lambda t: t["min_quantity"])
@@ -116,6 +123,7 @@ def build_pricing_index(
 # ---------------------------------------------------------------------------
 # Policies
 # ---------------------------------------------------------------------------
+
 
 def load_policies() -> dict[str, Any]:
     return _read_json("policies.json")
@@ -157,6 +165,7 @@ def normalize_policies(raw: dict) -> dict[str, Any]:
 # Requests (for demo endpoint)
 # ---------------------------------------------------------------------------
 
+
 def load_requests() -> list[dict]:
     return _read_json("requests.json")
 
@@ -164,6 +173,7 @@ def load_requests() -> list[dict]:
 # ---------------------------------------------------------------------------
 # Singleton store
 # ---------------------------------------------------------------------------
+
 
 class DataStore:
     """In-memory singleton holding all reference data."""
@@ -177,9 +187,7 @@ class DataStore:
         self.suppliers = load_suppliers()
         self.supplier_by_key = build_supplier_by_key(self.suppliers)
         self.supplier_by_name = build_supplier_by_name(self.suppliers)
-        self.supplier_id_to_name: dict[str, str] = {
-            s["supplier_id"]: s["supplier_name"] for s in self.suppliers
-        }
+        self.supplier_id_to_name: dict[str, str] = {s["supplier_id"]: s["supplier_name"] for s in self.suppliers}
         self.suppliers_by_category = build_suppliers_by_category(self.suppliers)
 
         self.pricing = load_pricing()
@@ -208,4 +216,3 @@ class DataStore:
 
     def get_supplier_name(self, supplier_id: str) -> str | None:
         return self.supplier_id_to_name.get(supplier_id)
-

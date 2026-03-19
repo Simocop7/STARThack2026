@@ -8,7 +8,6 @@ from typing import Any
 
 from api.azure_client import get_azure_client
 
-
 _VOICE_TOOL_SCHEMA = {
     "type": "function",
     "function": {
@@ -81,7 +80,8 @@ IMPORTANT:
 - Fix obvious speech recognition errors (e.g. "lampadaijne" → "lampadine", "filips" → "Philips")
 - The request_text should be a clean, well-formed version of what the user meant to say
 - If the user mentions a brand/supplier, extract it as preferred_supplier
-- Always infer the unit_of_measure from context (e.g. lightbulbs → "unit", laptops → "device")
+- For countable items (e.g. laptops, lightbulbs, chairs, licenses), the unit_of_measure is obvious ("unit", "device", etc.) — you can auto-fill it or leave it null; do NOT add it to missing_fields.
+- For items measured by weight, volume, length, or time (e.g. flour, cable, consulting hours), unit_of_measure is critical. If the user did not specify it, set unit_of_measure to null and ADD "unit_of_measure" to missing_fields.
 - If quantity is not mentioned, set it to null
 - missing_fields should include things like "budget" if not mentioned — but only truly important procurement fields"""
 
@@ -90,10 +90,10 @@ IMPORTANT:
         max_tokens=512,
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Voice transcript: \"{transcript}\""},
+            {"role": "user", "content": f'Voice transcript: "{transcript}"'},
         ],
         tools=[_VOICE_TOOL_SCHEMA],
-        tool_choice={"type": "function", "function": {"name": "parsed_voice_fields"}},
+        tool_choice={"type": "function", "function": {"name": "parsed_voice_fields"}},  # type: ignore[call-overload]
     )
 
     message = response.choices[0].message

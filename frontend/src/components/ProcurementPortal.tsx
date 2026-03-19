@@ -4,6 +4,7 @@ import RequestForm from "./RequestForm";
 import ValidationBanner from "./ValidationBanner";
 import SupplierRankingView from "./SupplierRankingView";
 import OrderConfirmationView from "./OrderConfirmationView";
+import OrderRecapView from "./OrderRecapView";
 import VoiceConversation from "./VoiceConversation";
 import PendingRequestsView from "./PendingRequestsView";
 import { t } from "../i18n";
@@ -38,6 +39,7 @@ export default function ProcurementPortal({ onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData | null>(null);
   const [language, setLanguage] = useState("en");
+  const [selectedSupplier, setSelectedSupplier] = useState<ScoredSupplier | null>(null);
 
   // Employee request tracking
   const [activeEmpRequestId, setActiveEmpRequestId] = useState<string | null>(null);
@@ -197,9 +199,14 @@ export default function ProcurementPortal({ onBack }: Props) {
     }
   }
 
-  // ── Place order ──────────────────────────────────────────────────
-  async function handleSelectSupplier(supplier: ScoredSupplier) {
-    if (!ranking || !formData) return;
+  // ── Step 1: supplier selected → show recap page ──────────────────
+  function handleSelectSupplier(supplier: ScoredSupplier) {
+    setSelectedSupplier(supplier);
+  }
+
+  // ── Step 2: confirmed on recap page → place order ─────────────────
+  async function handleConfirmOrder() {
+    if (!ranking || !formData || !selectedSupplier) return;
     const enriched = result?.enriched_request;
     setOrderLoading(true);
     try {
@@ -213,11 +220,11 @@ export default function ProcurementPortal({ onBack }: Props) {
         currency: currencyForCountry(deliveryCountry),
         delivery_country: deliveryCountry,
         required_by_date: formData.required_by_date || null,
-        selected_supplier_id: supplier.supplier_id,
-        selected_supplier_name: supplier.supplier_name,
-        unit_price: supplier.unit_price,
-        total_price: supplier.total_price,
-        pricing_tier_applied: supplier.pricing_tier_applied,
+        selected_supplier_id: selectedSupplier.supplier_id,
+        selected_supplier_name: selectedSupplier.supplier_name,
+        unit_price: selectedSupplier.unit_price,
+        total_price: selectedSupplier.total_price,
+        pricing_tier_applied: selectedSupplier.pricing_tier_applied,
         approval_threshold_id: ranking.approval_threshold_id,
         approval_threshold_note: ranking.approval_threshold_note,
         quotes_required: ranking.quotes_required,
@@ -231,7 +238,7 @@ export default function ProcurementPortal({ onBack }: Props) {
       if (res.ok) {
         const conf: OrderConfirmation = await res.json();
         setOrderConfirmation(conf);
-        // Mark the originating employee request as completed
+        setSelectedSupplier(null);
         if (activeEmpRequestId) {
           fetch(`/api/employee/requests/${activeEmpRequestId}/status?status=completed`, {
             method: "PATCH",
@@ -275,6 +282,7 @@ export default function ProcurementPortal({ onBack }: Props) {
     setResult(null);
     setRanking(null);
     setOrderConfirmation(null);
+    setSelectedSupplier(null);
     setError(null);
     setFormData(null);
     setVoiceMode(false);
@@ -402,11 +410,25 @@ export default function ProcurementPortal({ onBack }: Props) {
               <OrderConfirmationView confirmation={orderConfirmation} onNewRequest={handleNewRequest} />
             )}
 
-            {!loading && !rankingLoading && !orderLoading && !orderConfirmation && isApproved && ranking && (
+            {/* Order recap — shown after supplier selected, before sending */}
+            {!loading && !rankingLoading && !orderLoading && !orderConfirmation && selectedSupplier && ranking && formData && (
+              <OrderRecapView
+                supplier={selectedSupplier}
+                ranking={ranking}
+                formData={formData}
+                deliveryCountry={result?.enriched_request?.delivery_country ?? "DE"}
+                onConfirm={handleConfirmOrder}
+                onBack={() => setSelectedSupplier(null)}
+                loading={orderLoading}
+              />
+            )}
+
+            {!loading && !rankingLoading && !orderLoading && !orderConfirmation && !selectedSupplier && isApproved && ranking && (
               <SupplierRankingView
                 result={ranking}
                 onNewRequest={handleNewRequest}
                 onSelectSupplier={handleSelectSupplier}
+                orderContext={formData}
               />
             )}
 

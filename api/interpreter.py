@@ -7,14 +7,17 @@ import os
 from typing import Any
 
 from api.azure_client import get_azure_client
-from api.models import CategoryAlternative, CategorySuggestion, EnrichedRequest, FormInput, TextContradiction
+from api.models import (
+    CategoryAlternative,
+    CategorySuggestion,
+    EnrichedRequest,
+    FormInput,
+    TextContradiction,
+)
 
 
 def _build_system_prompt(categories: list[dict], suppliers: list[dict]) -> str:
-    cat_lines = "\n".join(
-        f"- {c['category_l1']} > {c['category_l2']} (unit: {c['typical_unit']})"
-        for c in categories
-    )
+    cat_lines = "\n".join(f"- {c['category_l1']} > {c['category_l2']} (unit: {c['typical_unit']})" for c in categories)
 
     # Deduplicate supplier names
     seen: set[str] = set()
@@ -47,6 +50,7 @@ INSTRUCTIONS:
    - detected_language: ISO 639-1 code of the request_text language
    - text_quantity_mentioned: if the text explicitly mentions a quantity/number, extract it as an integer. null if no quantity in text.
    - text_contradictions: array of contradictions between the structured form fields and the text. Each item has: field, form_value, text_value, explanation.
+   - unit_of_measure_required: boolean. Set to true ONLY when the items being requested are measured in a non-obvious unit that the user must specify (e.g. weight: kg/tons, volume: liters, time: hours/days, length: meters). Set to false when items are countable and the unit is obvious (e.g. laptops, lightbulbs, chairs, licenses — these are just "units"/"devices"/"pieces" and don't need explicit specification).
 
 3. CRITICAL: Only detect contradictions when there is a clear, unambiguous conflict. Do NOT flag minor wording differences.
 4. Always reason internally in English regardless of input language.
@@ -76,7 +80,10 @@ _TOOL_SCHEMA = {
             "type": "object",
             "properties": {
                 "item_description": {"type": "string"},
-                "delivery_country_code": {"type": ["string", "null"], "description": "ISO 3166-1 alpha-2 country code extracted from delivery_address"},
+                "delivery_country_code": {
+                    "type": ["string", "null"],
+                    "description": "ISO 3166-1 alpha-2 country code extracted from delivery_address",
+                },
                 "preferred_supplier_id": {"type": ["string", "null"]},
                 "preferred_supplier_name": {"type": ["string", "null"]},
                 "data_residency_required": {"type": "boolean"},
@@ -95,13 +102,34 @@ _TOOL_SCHEMA = {
                             "text_value": {"type": "string"},
                             "explanation": {"type": "string"},
                         },
-                        "required": ["field", "form_value", "text_value", "explanation"],
+                        "required": [
+                            "field",
+                            "form_value",
+                            "text_value",
+                            "explanation",
+                        ],
                     },
                 },
-                "category_l1": {"type": "string", "description": "Auto-detected category L1 from the taxonomy"},
-                "category_l2": {"type": "string", "description": "Auto-detected category L2 from the taxonomy"},
-                "category_confidence": {"type": "number", "description": "Confidence score 0.0-1.0 for the category assignment"},
-                "category_reasoning": {"type": "string", "description": "Brief explanation of why this category was chosen"},
+                "unit_of_measure_required": {
+                    "type": "boolean",
+                    "description": "Whether the user must specify a unit of measure (true for bulk/weight/volume items like flour, cable; false for countable items like laptops, chairs)",
+                },
+                "category_l1": {
+                    "type": "string",
+                    "description": "Auto-detected category L1 from the taxonomy",
+                },
+                "category_l2": {
+                    "type": "string",
+                    "description": "Auto-detected category L2 from the taxonomy",
+                },
+                "category_confidence": {
+                    "type": "number",
+                    "description": "Confidence score 0.0-1.0 for the category assignment",
+                },
+                "category_reasoning": {
+                    "type": "string",
+                    "description": "Brief explanation of why this category was chosen",
+                },
                 "category_alternatives": {
                     "type": "array",
                     "description": "Alternative categories if confidence < 0.9",
@@ -112,7 +140,11 @@ _TOOL_SCHEMA = {
                             "alt_category_l2": {"type": "string"},
                             "alt_reason": {"type": "string"},
                         },
-                        "required": ["alt_category_l1", "alt_category_l2", "alt_reason"],
+                        "required": [
+                            "alt_category_l1",
+                            "alt_category_l2",
+                            "alt_reason",
+                        ],
                     },
                 },
             },
@@ -128,6 +160,7 @@ _TOOL_SCHEMA = {
                 "detected_language",
                 "text_quantity_mentioned",
                 "text_contradictions",
+                "unit_of_measure_required",
                 "category_l1",
                 "category_l2",
                 "category_confidence",
@@ -146,13 +179,13 @@ REQUEST TEXT:
 {form.request_text}
 
 STRUCTURED FORM FIELDS:
-- category_l1: {form.category_l1 or 'NOT PROVIDED'}
-- category_l2: {form.category_l2 or 'NOT PROVIDED'}
-- quantity: {form.quantity or 'NOT PROVIDED'}
-- unit_of_measure: {form.unit_of_measure or 'NOT PROVIDED'}
-- delivery_address: {form.delivery_address or 'NOT PROVIDED'}
-- required_by_date: {form.required_by_date or 'NOT PROVIDED'}
-- preferred_supplier: {form.preferred_supplier or 'NOT PROVIDED'}
+- category_l1: {form.category_l1 or "NOT PROVIDED"}
+- category_l2: {form.category_l2 or "NOT PROVIDED"}
+- quantity: {form.quantity or "NOT PROVIDED"}
+- unit_of_measure: {form.unit_of_measure or "NOT PROVIDED"}
+- delivery_address: {form.delivery_address or "NOT PROVIDED"}
+- required_by_date: {form.required_by_date or "NOT PROVIDED"}
+- preferred_supplier: {form.preferred_supplier or "NOT PROVIDED"}
 
 Extract and enrich the request using the enriched_request function."""
 
@@ -174,7 +207,7 @@ async def interpret_request(
             {"role": "user", "content": _build_user_message(form_input)},
         ],
         tools=[_TOOL_SCHEMA],
-        tool_choice={"type": "function", "function": {"name": "enriched_request"}},
+        tool_choice={"type": "function", "function": {"name": "enriched_request"}},  # type: ignore[call-overload]
     )
 
     # Extract tool call result
@@ -205,11 +238,13 @@ async def interpret_request(
     alternatives: list[CategoryAlternative] = []
     for alt in tool_result.get("category_alternatives", []):
         try:
-            alternatives.append(CategoryAlternative(
-                category_l1=alt["alt_category_l1"],
-                category_l2=alt["alt_category_l2"],
-                reason=alt["alt_reason"],
-            ))
+            alternatives.append(
+                CategoryAlternative(
+                    category_l1=alt["alt_category_l1"],
+                    category_l2=alt["alt_category_l2"],
+                    reason=alt["alt_reason"],
+                )
+            )
         except (TypeError, ValueError, KeyError):
             continue
 
@@ -248,5 +283,6 @@ async def interpret_request(
         detected_language=form_input.language,
         text_quantity_mentioned=tool_result.get("text_quantity_mentioned"),
         text_contradictions=contradictions,
+        unit_of_measure_required=tool_result.get("unit_of_measure_required", False),
         category_suggestion=category_suggestion,
     )

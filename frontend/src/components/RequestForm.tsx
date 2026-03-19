@@ -388,9 +388,17 @@ export default function RequestForm({
           <input
             required
             type="date"
+            min="2020-01-01"
+            max="9999-12-31"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
             value={form.required_by_date}
-            onChange={(e) => update("required_by_date", e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              // Reject dates with year > 4 digits
+              const yearPart = val.split("-")[0];
+              if (yearPart && yearPart.length > 4) return;
+              update("required_by_date", val);
+            }}
           />
         </div>
       </div>

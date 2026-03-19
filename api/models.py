@@ -8,8 +8,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-
 # --- Enums ---
+
 
 class Severity(str, Enum):
     CRITICAL = "critical"
@@ -32,6 +32,7 @@ class IssueType(str, Enum):
 
 
 # --- Category suggestion from LLM ---
+
 
 class CategoryAlternative(BaseModel):
     category_l1: str
@@ -74,6 +75,7 @@ class FormInput(BaseModel):
 
 # --- Enriched Request (after LLM interpretation) ---
 
+
 class TextContradiction(BaseModel):
     field: str
     form_value: str
@@ -82,9 +84,26 @@ class TextContradiction(BaseModel):
 
 
 _VALID_COUNTRY_CODES = {
-    "DE", "FR", "NL", "BE", "AT", "IT", "ES", "PL", "UK",
-    "CH", "US", "CA", "BR", "MX", "SG", "AU", "IN", "JP",
-    "UAE", "ZA",
+    "DE",
+    "FR",
+    "NL",
+    "BE",
+    "AT",
+    "IT",
+    "ES",
+    "PL",
+    "UK",
+    "CH",
+    "US",
+    "CA",
+    "BR",
+    "MX",
+    "SG",
+    "AU",
+    "IN",
+    "JP",
+    "UAE",
+    "ZA",
 }
 
 
@@ -108,8 +127,7 @@ class EnrichedRequest(BaseModel):
         v = v.upper().strip()
         if v not in _VALID_COUNTRY_CODES:
             raise ValueError(
-                f"Invalid delivery country code: '{v}'. "
-                f"Must be one of: {', '.join(sorted(_VALID_COUNTRY_CODES))}"
+                f"Invalid delivery country code: '{v}'. Must be one of: {', '.join(sorted(_VALID_COUNTRY_CODES))}"
             )
         return v
 
@@ -124,12 +142,14 @@ class EnrichedRequest(BaseModel):
     detected_language: str = "en"
     text_quantity_mentioned: Optional[int] = None
     text_contradictions: list[TextContradiction] = Field(default_factory=list)
+    unit_of_measure_required: bool = False  # LLM decides if unit_of_measure is needed
 
     # Auto-categorization
     category_suggestion: Optional[CategorySuggestion] = None
 
 
 # --- Validation ---
+
 
 class FixAction(BaseModel):
     field: str

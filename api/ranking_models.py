@@ -7,14 +7,12 @@ reviewers can trace exactly why a supplier was ranked (or excluded).
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Optional
 
-import re
-
 from pydantic import BaseModel, Field, field_validator
-
 
 # ── Input: Clean Order Recap (from the Procurement Office) ─────────────
 
@@ -72,6 +70,14 @@ class ScoreBreakdown(BaseModel):
     lead_time_score: float = Field(..., ge=0, le=1)
 
 
+class RawScores(BaseModel):
+    """Raw dataset values (0-100) for display — not used in composite calculation."""
+
+    quality: int = Field(..., description="Quality score from suppliers.csv (higher = better)")
+    risk: int = Field(..., description="Risk score from suppliers.csv (lower = better)")
+    esg: int = Field(..., description="ESG score from suppliers.csv (higher = better)")
+
+
 # ── Compliance check log (attached per supplier) ──────────────────────
 
 
@@ -110,6 +116,7 @@ class ScoredSupplier(BaseModel):
 
     # Scores
     score_breakdown: ScoreBreakdown
+    raw_scores: RawScores
     composite_score: float
 
     # Compliance
@@ -118,10 +125,7 @@ class ScoredSupplier(BaseModel):
     # Audit rationale — the most important field for the judges
     recommendation_note: str = Field(
         ...,
-        description=(
-            "Human-readable rationale: why this rank, which tier, "
-            "which checks passed/failed."
-        ),
+        description=("Human-readable rationale: why this rank, which tier, which checks passed/failed."),
     )
 
 

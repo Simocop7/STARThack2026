@@ -16,6 +16,12 @@ export interface ScoreBreakdown {
   lead_time_score: number;
 }
 
+export interface RawScores {
+  quality: number;  // 0-100, higher = better
+  risk: number;     // 0-100, lower = better
+  esg: number;      // 0-100, higher = better
+}
+
 export interface ComplianceCheck {
   rule_id: string;
   rule_description: string;
@@ -38,6 +44,7 @@ export interface ScoredSupplier {
   standard_lead_time_days: number;
   expedited_lead_time_days: number | null;
   score_breakdown: ScoreBreakdown;
+  raw_scores: RawScores;
   composite_score: number;
   compliance_checks: ComplianceCheck[];
   recommendation_note: string;
