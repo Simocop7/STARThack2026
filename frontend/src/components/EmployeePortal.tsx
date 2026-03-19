@@ -17,8 +17,8 @@ type Phase = "form" | "review" | "submitted";
 type ConversationPhase = "idle" | "speaking" | "listening" | "processing";
 type OverlayPhase = "listening" | "processing" | "speaking" | "closing";
 
-const VOICE_CONFIRMATION_TEXT =
-  "Sure, I'm processing your request and inserting it into the form now.";
+const VOICE_SUCCESS_TEXT =
+  "Perfect! I'll estimate the category for you. Please check that the form is filled in correctly.";
 
 interface Props {
   onBack: () => void;
@@ -55,6 +55,11 @@ export default function EmployeePortal({ onBack }: Props) {
   const [interimTranscript, setInterimTranscript] = useState("");
 
   const volumeLevel = useAudioAnalyser(overlayActive);
+  const forceTranscriptRef = useRef<((transcript: string) => void) | null>(null);
+  // Tracks whether the overlay is waiting for a follow-up answer (fields still missing)
+  const pendingFollowUpRef = useRef(false);
+  // Tracks the voice conversation round (0 = first interaction)
+  const voiceRoundRef = useRef(0);
 
   const i = t(language);
 
@@ -69,6 +74,7 @@ export default function EmployeePortal({ onBack }: Props) {
     setVoiceMode(true);
     setTtsText(null);
     setConversationPhase("idle");
+    voiceRoundRef.current = 0;
 
     // Start listening after a brief delay for overlay to mount
     setTimeout(() => {
@@ -80,6 +86,7 @@ export default function EmployeePortal({ onBack }: Props) {
   const handleOverlayClose = useCallback(() => {
     setOverlayPhase("closing");
     voiceInputRef.current?.stopListening();
+    pendingFollowUpRef.current = false;
     setTimeout(() => {
       setOverlayActive(false);
       setVoiceMode(false);
@@ -89,19 +96,47 @@ export default function EmployeePortal({ onBack }: Props) {
     }, 400);
   }, []);
 
-  // ── Called when VoiceInput produces a final transcript ───────
-  // In the one-shot flow: immediately trigger the confirmation TTS
-  const handleVoiceTranscriptForOverlay = useCallback(() => {
-    // Transition to processing briefly, then to speaking
+  // ── Called by RequestForm after voice parse with missing required fields ──
+  const handleMissingFieldsFromOverlay = useCallback(async (fields: string[]) => {
     setOverlayPhase("processing");
     setInterimTranscript("");
 
-    // Set the hardcoded confirmation TTS immediately
-    setTimeout(() => {
-      setTtsText(VOICE_CONFIRMATION_TEXT);
+    const isFirstRound = voiceRoundRef.current === 0;
+    voiceRoundRef.current += 1;
+
+    if (fields.length === 0) {
+      // All required fields filled — success
+      pendingFollowUpRef.current = false;
+      const prefix = isFirstRound ? "Got it! " : "";
+      setTimeout(() => {
+        setTtsText(prefix + VOICE_SUCCESS_TEXT);
+        setConversationPhase("speaking");
+      }, 500);
+    } else {
+      // Fields still missing — ask follow-up via LLM
+      pendingFollowUpRef.current = true;
+      try {
+        const res = await fetch("/api/generate-followup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            missing_fields: fields,
+            language,
+            is_first_round: isFirstRound,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setTtsText(data.text);
+        } else {
+          setTtsText("Could you provide a few more details?");
+        }
+      } catch {
+        setTtsText("Could you provide a few more details?");
+      }
       setConversationPhase("speaking");
-    }, 500);
-  }, []);
+    }
+  }, [language]);
 
   // ── Called when TTS audio starts playing ────────────────────
   const handleSpeakingStart = useCallback(() => {
@@ -113,14 +148,24 @@ export default function EmployeePortal({ onBack }: Props) {
     if (!voiceMode) return;
 
     if (overlayActive) {
-      // One-shot flow: close overlay after confirmation speech
-      setOverlayPhase("closing");
-      setTimeout(() => {
-        setOverlayActive(false);
-        setVoiceMode(false);
+      if (pendingFollowUpRef.current) {
+        // Follow-up question was asked — re-open listening for the answer
+        setOverlayPhase("listening");
+        setInterimTranscript("");
         setTtsText(null);
-        setConversationPhase("idle");
-      }, 400);
+        setTimeout(() => {
+          voiceInputRef.current?.startListening();
+        }, 300);
+      } else {
+        // All fields filled — close overlay
+        setOverlayPhase("closing");
+        setTimeout(() => {
+          setOverlayActive(false);
+          setVoiceMode(false);
+          setTtsText(null);
+          setConversationPhase("idle");
+        }, 400);
+      }
       return;
     }
 
@@ -141,6 +186,7 @@ export default function EmployeePortal({ onBack }: Props) {
     setConversationPhase("idle");
     setOverlayActive(false);
     setInterimTranscript("");
+    pendingFollowUpRef.current = false;
     voiceInputRef.current?.stopListening();
   }, []);
 
@@ -320,6 +366,18 @@ export default function EmployeePortal({ onBack }: Props) {
         volumeLevel={volumeLevel}
         interimTranscript={interimTranscript}
         onClose={handleOverlayClose}
+        onStopListening={() => {
+          voiceInputRef.current?.stopListening();
+          const transcript = interimTranscript.trim();
+          if (transcript) {
+            setOverlayPhase("processing");
+            setInterimTranscript("");
+            // Send transcript to parse — missing fields callback will handle the flow
+            forceTranscriptRef.current?.(transcript);
+          } else {
+            handleOverlayClose();
+          }
+        }}
       />
 
       {/* VoiceConversation — hidden when overlay active, but TTS logic still runs */}
@@ -444,9 +502,10 @@ export default function EmployeePortal({ onBack }: Props) {
               showDemoSelector={true}
               submitLabel={i.validateRequest}
               onActivateVoiceOverlay={handleActivateVoice}
-              onVoiceTranscriptForOverlay={handleVoiceTranscriptForOverlay}
               onInterimTranscriptChange={setInterimTranscript}
               overlayActive={overlayActive}
+              onRegisterForceTranscript={(fn) => { forceTranscriptRef.current = fn; }}
+              onMissingFieldsDetected={handleMissingFieldsFromOverlay}
             />
           </>
         )}

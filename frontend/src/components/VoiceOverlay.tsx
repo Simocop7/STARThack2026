@@ -8,6 +8,8 @@ interface Props {
   volumeLevel: number;
   interimTranscript: string;
   onClose: () => void;
+  /** Stop listening and submit whatever was captured so far */
+  onStopListening?: () => void;
 }
 
 export default function VoiceOverlay({
@@ -16,8 +18,9 @@ export default function VoiceOverlay({
   volumeLevel,
   interimTranscript,
   onClose,
+  onStopListening,
 }: Props) {
-  const orbRef = useRef<HTMLDivElement>(null);
+  const orbRef = useRef<HTMLElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
 
   // Bridge volume level to CSS custom property for listening state
@@ -120,20 +123,21 @@ export default function VoiceOverlay({
           />
         )}
 
-        {/* The Orb */}
-        <div
-          ref={orbRef}
-          className={`w-60 h-60 rounded-full ${orbClass}`}
-          style={{
-            animation:
-              phase === "listening"
-                ? undefined
-                : phase === "speaking"
-                  ? undefined // handled by CSS class
-                  : undefined,
-            ...(phase === "listening" ? {} : {}),
-          }}
-        />
+        {/* The Orb — clickable during listening to stop */}
+        {phase === "listening" && onStopListening ? (
+          <button
+            type="button"
+            ref={orbRef as React.RefObject<HTMLButtonElement | null>}
+            onClick={onStopListening}
+            className={`w-60 h-60 rounded-full ${orbClass} cursor-pointer border-0 outline-none`}
+            title="Tap to finish"
+          />
+        ) : (
+          <div
+            ref={orbRef as React.RefObject<HTMLDivElement | null>}
+            className={`w-60 h-60 rounded-full ${orbClass}`}
+          />
+        )}
 
         {/* Status label */}
         <div className="flex flex-col items-center gap-3">
@@ -153,10 +157,25 @@ export default function VoiceOverlay({
         </div>
       </div>
 
+      {/* Stop / Done button */}
+      {phase === "listening" && onStopListening && (
+        <button
+          type="button"
+          onClick={onStopListening}
+          className="absolute bottom-20 z-10 flex items-center gap-2 px-6 py-3 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white font-medium transition-all backdrop-blur-sm"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+          </svg>
+          Done
+        </button>
+      )}
+
       {/* Bottom hint */}
       {phase === "listening" && (
         <p className="absolute bottom-8 text-sm text-white/30">
-          Speak your procurement request...
+          Speak, then tap the orb or press Done when finished
         </p>
       )}
     </div>

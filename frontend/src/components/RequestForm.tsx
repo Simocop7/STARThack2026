@@ -29,12 +29,14 @@ interface Props {
   submitLabel?: string;
   /** Activate the immersive voice overlay */
   onActivateVoiceOverlay?: () => void;
-  /** Called when voice transcript is received while overlay is active */
-  onVoiceTranscriptForOverlay?: () => void;
   /** Called with interim transcript text */
   onInterimTranscriptChange?: (text: string) => void;
   /** Whether the voice overlay is currently active */
   overlayActive?: boolean;
+  /** Expose a way for parent to force-submit a transcript (bypass VoiceInput) */
+  onRegisterForceTranscript?: (fn: (transcript: string) => void) => void;
+  /** Called after voice parse with list of still-missing required fields */
+  onMissingFieldsDetected?: (fields: string[]) => void;
 }
 
 const DEFAULT_DELIVERY_ADDRESS = "St. Gallen, Olma Halle 9";
@@ -49,9 +51,10 @@ export default function RequestForm({
   showDemoSelector = true,
   submitLabel,
   onActivateVoiceOverlay,
-  onVoiceTranscriptForOverlay,
   onInterimTranscriptChange,
   overlayActive,
+  onRegisterForceTranscript,
+  onMissingFieldsDetected,
 }: Props) {
   const [form, setForm] = useState<FormData>(
     initialData ?? {
@@ -85,6 +88,9 @@ export default function RequestForm({
   // Track latest form for auto-submit (avoid stale closures)
   const formRef = useRef(form);
   formRef.current = form;
+
+  // Stable ref to always call the latest handleVoiceTranscript (avoids stale closure in forceTranscript)
+  const handleVoiceTranscriptRef = useRef<(transcript: string) => void>(() => {});
 
   const pendingAutoSubmit = useRef(false);
 
@@ -156,11 +162,6 @@ export default function RequestForm({
       onVoiceModeChange(true);
     }
 
-    // Notify overlay that transcript was received (triggers TTS confirmation)
-    if (overlayActive) {
-      onVoiceTranscriptForOverlay?.();
-    }
-
     try {
       const res = await fetch("/api/parse-voice", {
         method: "POST",
@@ -175,10 +176,13 @@ export default function RequestForm({
 
       const parsed = await res.json();
 
+      // Merge parsed fields into form, preserving existing non-empty values
+      // (important for follow-up rounds where user fills in missing fields)
+      let updatedForm: FormData = formRef.current;
       setForm((prev) => {
         const updated = {
           ...prev,
-          request_text: parsed.request_text || prev.request_text || transcript,
+          request_text: prev.request_text || parsed.request_text || transcript,
           quantity: parsed.quantity ?? prev.quantity,
           unit_of_measure: parsed.unit_of_measure || prev.unit_of_measure,
           required_by_date: parsed.required_by_date || prev.required_by_date,
@@ -186,6 +190,7 @@ export default function RequestForm({
           delivery_address: prev.delivery_address || DEFAULT_DELIVERY_ADDRESS,
         };
         formRef.current = updated;
+        updatedForm = updated;
         return updated;
       });
 
@@ -193,8 +198,18 @@ export default function RequestForm({
         setMissingFields(parsed.missing_fields);
       }
 
-      // In voice mode, auto-submit after parse
-      if (voiceMode) {
+      // Check which required fields are still missing after merge
+      // Note: category is NOT required here — it gets auto-detected by /api/validate
+      const stillMissing: string[] = [];
+      if (!updatedForm.quantity) stillMissing.push("quantity");
+      if (!updatedForm.required_by_date) stillMissing.push("delivery date");
+
+      if (overlayActive) {
+        // In overlay mode: notify parent about missing fields
+        // Don't auto-submit — let the overlay TTS finish first, user reviews the form after
+        onMissingFieldsDetected?.(stillMissing);
+      } else if (voiceMode) {
+        // Non-overlay voice mode: auto-submit regardless
         pendingAutoSubmit.current = true;
       }
     } catch {
@@ -203,6 +218,14 @@ export default function RequestForm({
       setVoiceParsing(false);
     }
   }
+
+  // Keep ref pointing to latest handleVoiceTranscript to avoid stale closures
+  handleVoiceTranscriptRef.current = handleVoiceTranscript;
+
+  // Register force-transcript callback for parent to bypass VoiceInput
+  useEffect(() => {
+    onRegisterForceTranscript?.((transcript: string) => handleVoiceTranscriptRef.current(transcript));
+  }, [onRegisterForceTranscript]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -306,7 +329,7 @@ export default function RequestForm({
           onTranscript={handleVoiceTranscript}
           onParsing={setVoiceParsing}
           disabled={voiceParsing}
-          hidden={overlayActive}
+          hidden
           onInterimChange={onInterimTranscriptChange}
           autoStopOnSilence={overlayActive}
         />

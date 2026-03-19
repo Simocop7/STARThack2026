@@ -119,7 +119,7 @@ export default function VoiceConversation({
         audioRef.current = null;
       }
     };
-  }, [textToSpeak, active, language, onPlaybackEnd]);
+  }, [textToSpeak, active, language, onPlaybackEnd, onSpeakingStart]);
 
   // Cleanup blob URL on unmount
   useEffect(() => {

@@ -87,10 +87,15 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
       if (recognitionRef.current) {
         recognitionRef.current.stop();
         recognitionRef.current = null;
+      } else {
+        const transcript = finalTranscriptRef.current.trim();
+        if (transcript) {
+          onTranscript(transcript);
+        }
       }
       setListening(false);
       setInterim("");
-    }, []);
+    }, [onTranscript]);
 
     const startListening = useCallback(() => {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -159,15 +164,20 @@ const VoiceInput = forwardRef<VoiceInputHandle, Props>(
 
       recognition.onend = () => {
         setListening(false);
+        // Use final transcript, but fall back to interim if no final result arrived
+        const transcript = finalTranscriptRef.current.trim() || lastSeenTranscript.trim();
         setInterim("");
-        const transcript = finalTranscriptRef.current.trim();
         if (transcript) {
           onTranscript(transcript);
         }
       };
 
       recognitionRef.current = recognition;
-      recognition.start();
+      try {
+        recognition.start();
+      } catch {
+        return;
+      }
       setListening(true);
 
       // Overlay mode: add safety-net timers that don't depend on isFinal

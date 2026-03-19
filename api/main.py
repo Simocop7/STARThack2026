@@ -70,6 +70,7 @@ async def rate_limit_middleware(request: Request, call_next):
         "/api/rank",
         "/api/rank/custom-weights",
         "/api/order",
+        "/api/generate-followup",
     ):
         client_ip = request.client.host if request.client else "unknown"
         now = time.time()
@@ -206,6 +207,62 @@ async def parse_voice(voice: VoiceInput) -> dict:
     today = date_mod.today().isoformat()
     result = await parse_voice_transcript(voice.transcript, voice.language, today)
     return result
+
+
+class FollowUpRequest(BaseModel):
+    missing_fields: list[str] = Field(..., min_length=1, max_length=10)
+    language: str = "en"
+    is_first_round: bool = False
+
+    @field_validator("language")
+    @classmethod
+    def validate_language(cls, v: str) -> str:
+        if v not in _SUPPORTED_LANGUAGES:
+            return "en"
+        return v
+
+
+@app.post("/api/generate-followup", dependencies=[Depends(verify_api_key)])
+async def generate_followup(req: FollowUpRequest) -> dict:
+    """Generate a natural follow-up question asking for missing procurement fields."""
+    from api.azure_client import get_azure_client
+
+    client = get_azure_client()
+    deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
+
+    fields_str = ", ".join(req.missing_fields)
+
+    if req.is_first_round:
+        system_prompt = (
+            "You are Silvio, a friendly procurement assistant speaking to an employee via voice. "
+            "The employee just told you what they need. You understood their request and you're happy to help. "
+            "Start with a brief, warm acknowledgment (e.g. 'Got it!' or 'Sure thing!'), "
+            "then ask for the missing details in a natural, conversational way. "
+            "Be concise (2 sentences max). Speak in English. "
+            "Do NOT list field names technically — use natural language. "
+            "Examples: 'How many do you need?' instead of 'Please provide quantity'. "
+            "'When do you need this by?' instead of 'Please provide required_by_date'."
+        )
+    else:
+        system_prompt = (
+            "You are Silvio, a friendly procurement assistant speaking to an employee via voice. "
+            "You already greeted the employee. Now you still need a few more details. "
+            "Generate a short, natural sentence asking for the missing information. "
+            "Be concise (1-2 sentences max). Speak in English. "
+            "Do NOT list field names technically — use natural language."
+        )
+
+    response = await client.chat.completions.create(
+        model=deployment,
+        max_tokens=150,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Missing fields: {fields_str}"},
+        ],
+    )
+
+    text = response.choices[0].message.content or "Could you provide a few more details?"
+    return {"text": text.strip()}
 
 
 class TTSInput(BaseModel):
