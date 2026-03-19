@@ -1,4 +1,5 @@
 import { useState } from "react";
+import HeroPage from "./components/HeroPage";
 import RoleSelection from "./components/RoleSelection";
 import EmployeePortal from "./components/EmployeePortal";
 import ProcurementPortal from "./components/ProcurementPortal";
@@ -8,14 +9,30 @@ type Role = "employee" | "office";
 type OfficeView = "inbox" | "process";
 
 export default function App() {
-  const [role, setRole] = useState<Role | null>(null);
+  // Start on the hero; "Enter" jumps straight to employee portal
+  const [showHero,  setShowHero]  = useState(true);
+  const [role,      setRole]      = useState<Role | null>(null);
   const [officeView, setOfficeView] = useState<OfficeView>("inbox");
-  const [empKey, setEmpKey] = useState(0);
+  const [empKey,    setEmpKey]    = useState(0);
 
+  // ── Hero entry ──────────────────────────────────────────────────
+  if (showHero) {
+    return (
+      <HeroPage
+        onEnter={() => {
+          setShowHero(false);
+          setRole("employee");
+        }}
+      />
+    );
+  }
+
+  // ── Role selection (shown after "Switch Role") ──────────────────
   if (!role) {
     return <RoleSelection onSelect={setRole} />;
   }
 
+  // ── Portal views inside the sidebar shell ───────────────────────
   const handleSwitchRole = () => {
     setRole(null);
     setOfficeView("inbox");
