@@ -20,7 +20,7 @@ from api.elevenlabs_client import get_elevenlabs_client
 from api.models import FormInput, ValidationResult
 from api.pipeline import process_request
 from api.voice_parser import parse_voice_transcript
-from api.ranking_models import CleanOrderRecap, RankedSupplierOutput, ScoringWeights
+from api.ranking_models import CleanOrderRecap, RankedSupplierOutput, ScoringWeights, OrderRequest, OrderConfirmation
 from api.ranking_orchestrator import get_top_5_suppliers
 
 app = FastAPI(title="Smart Procurement Validator", version="0.1.0")
@@ -217,3 +217,62 @@ async def rank_suppliers_custom(
 ) -> RankedSupplierOutput:
     """Rank suppliers with custom scoring weights."""
     return await get_top_5_suppliers(order, weights=weights, force_llm=force_llm)
+
+
+# ── Order Placement ─────────────────────────────────────────────────────
+
+import uuid
+from datetime import datetime as dt
+
+
+@app.post("/api/order", response_model=OrderConfirmation)
+async def place_order(order: OrderRequest) -> OrderConfirmation:
+    """Record the procurement office's supplier selection and return a receipt."""
+
+    order_id = f"ORD-{uuid.uuid4().hex[:8].upper()}"
+    placed_at = dt.now(tz=__import__("datetime").timezone.utc)
+
+    approval_required = order.approval_threshold_id is not None
+
+    next_steps: list[str] = []
+    if approval_required:
+        next_steps.append(f"Obtain approval per threshold {order.approval_threshold_id}.")
+    if order.quotes_required and order.quotes_required > 1:
+        next_steps.append(
+            f"Collect {order.quotes_required} competitive quote(s) before award."
+        )
+    next_steps.append(
+        f"Issue purchase order to {order.selected_supplier_name} referencing {order_id}."
+    )
+    if order.required_by_date:
+        next_steps.append(
+            f"Confirm delivery commitment for {order.required_by_date.isoformat()} with supplier."
+        )
+    next_steps.append("Archive this confirmation and supplier ranking output for audit.")
+
+    status = "pending_approval" if approval_required else "submitted"
+
+    return OrderConfirmation(
+        order_id=order_id,
+        request_id=order.request_id,
+        placed_at=placed_at,
+        status=status,
+        selected_supplier_id=order.selected_supplier_id,
+        selected_supplier_name=order.selected_supplier_name,
+        category_l1=order.category_l1,
+        category_l2=order.category_l2,
+        quantity=order.quantity,
+        unit_of_measure=order.unit_of_measure,
+        unit_price=order.unit_price,
+        total_price=order.total_price,
+        currency=order.currency,
+        delivery_country=order.delivery_country,
+        required_by_date=order.required_by_date,
+        pricing_tier_applied=order.pricing_tier_applied,
+        approval_required=approval_required,
+        approval_threshold_id=order.approval_threshold_id,
+        approval_threshold_note=order.approval_threshold_note,
+        quotes_required=order.quotes_required,
+        notes=order.notes,
+        next_steps=next_steps,
+    )

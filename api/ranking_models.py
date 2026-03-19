@@ -173,3 +173,63 @@ class RankedSupplierOutput(BaseModel):
     # Audit
     policies_checked: list[str] = Field(default_factory=list)
     llm_fallback_reason: Optional[str] = None
+
+
+# ── Order Placement ─────────────────────────────────────────────────────
+
+
+class OrderRequest(BaseModel):
+    """Submitted when the procurement office selects a supplier."""
+
+    request_id: str
+    category_l1: str
+    category_l2: str
+    quantity: int
+    unit_of_measure: str
+    currency: str
+    delivery_country: str
+    required_by_date: Optional[date] = None
+
+    selected_supplier_id: str
+    selected_supplier_name: str
+    unit_price: float
+    total_price: float
+    pricing_tier_applied: str
+
+    # Approval context carried forward from ranking output
+    approval_threshold_id: Optional[str] = None
+    approval_threshold_note: Optional[str] = None
+    quotes_required: Optional[int] = None
+
+    notes: Optional[str] = None
+
+
+class OrderConfirmation(BaseModel):
+    """Receipt returned after the order is placed."""
+
+    order_id: str
+    request_id: str
+    placed_at: datetime
+
+    status: str  # "submitted" | "pending_approval"
+
+    selected_supplier_id: str
+    selected_supplier_name: str
+    category_l1: str
+    category_l2: str
+    quantity: int
+    unit_of_measure: str
+    unit_price: float
+    total_price: float
+    currency: str
+    delivery_country: str
+    required_by_date: Optional[date] = None
+    pricing_tier_applied: str
+
+    approval_required: bool
+    approval_threshold_id: Optional[str] = None
+    approval_threshold_note: Optional[str] = None
+    quotes_required: Optional[int] = None
+
+    notes: Optional[str] = None
+    next_steps: list[str] = Field(default_factory=list)

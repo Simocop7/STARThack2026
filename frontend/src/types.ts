@@ -76,6 +76,53 @@ export interface RankedSupplierOutput {
   llm_fallback_reason: string | null;
 }
 
+// ── Order Types ─────────────────────────────────────────────────────
+
+export interface OrderRequest {
+  request_id: string;
+  category_l1: string;
+  category_l2: string;
+  quantity: number;
+  unit_of_measure: string;
+  currency: string;
+  delivery_country: string;
+  required_by_date: string | null;
+  selected_supplier_id: string;
+  selected_supplier_name: string;
+  unit_price: number;
+  total_price: number;
+  pricing_tier_applied: string;
+  approval_threshold_id: string | null;
+  approval_threshold_note: string | null;
+  quotes_required: number | null;
+  notes: string | null;
+}
+
+export interface OrderConfirmation {
+  order_id: string;
+  request_id: string;
+  placed_at: string;
+  status: "submitted" | "pending_approval";
+  selected_supplier_id: string;
+  selected_supplier_name: string;
+  category_l1: string;
+  category_l2: string;
+  quantity: number;
+  unit_of_measure: string;
+  unit_price: number;
+  total_price: number;
+  currency: string;
+  delivery_country: string;
+  required_by_date: string | null;
+  pricing_tier_applied: string;
+  approval_required: boolean;
+  approval_threshold_id: string | null;
+  approval_threshold_note: string | null;
+  quotes_required: number | null;
+  notes: string | null;
+  next_steps: string[];
+}
+
 // ── Form Types ─────────────────────────────────────────────────────
 
 export interface FormData {

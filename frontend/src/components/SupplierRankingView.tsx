@@ -4,6 +4,7 @@ import type { RankedSupplierOutput, ScoredSupplier, Escalation } from "../types"
 interface Props {
   result: RankedSupplierOutput;
   onNewRequest: () => void;
+  onSelectSupplier: (supplier: ScoredSupplier) => void;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -66,7 +67,15 @@ function EscalationCard({ esc }: { esc: Escalation }) {
   );
 }
 
-function SupplierCard({ supplier, currency }: { supplier: ScoredSupplier; currency: string }) {
+function SupplierCard({
+  supplier,
+  currency,
+  onSelect,
+}: {
+  supplier: ScoredSupplier;
+  currency: string;
+  onSelect: (s: ScoredSupplier) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const sb = supplier.score_breakdown;
 
@@ -126,6 +135,20 @@ function SupplierCard({ supplier, currency }: { supplier: ScoredSupplier; curren
         <ScoreBar label="Lead time" value={sb.lead_time_score} color="bg-purple-500" />
       </div>
 
+      {/* Select supplier */}
+      <div className="border-t border-gray-100 px-4 py-3">
+        <button
+          onClick={() => onSelect(supplier)}
+          className={`w-full rounded-lg py-2 text-sm font-semibold transition-colors ${
+            supplier.rank === 1
+              ? "bg-blue-600 text-white hover:bg-blue-700"
+              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+          }`}
+        >
+          {supplier.rank === 1 ? "Select Recommended Supplier" : "Select this Supplier"}
+        </button>
+      </div>
+
       {/* Expandable details */}
       <div className="border-t border-gray-100">
         <button
@@ -171,7 +194,7 @@ function SupplierCard({ supplier, currency }: { supplier: ScoredSupplier; curren
 
 // ── Main component ─────────────────────────────────────────────────
 
-export default function SupplierRankingView({ result, onNewRequest }: Props) {
+export default function SupplierRankingView({ result, onNewRequest, onSelectSupplier }: Props) {
   const [showExcluded, setShowExcluded] = useState(false);
 
   // Guess currency from first supplier's pricing (fallback EUR)
@@ -251,7 +274,7 @@ export default function SupplierRankingView({ result, onNewRequest }: Props) {
         <div className="space-y-4">
           <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Ranked Suppliers</h3>
           {result.ranking.map(s => (
-            <SupplierCard key={s.supplier_id} supplier={s} currency={currency} />
+            <SupplierCard key={s.supplier_id} supplier={s} currency={currency} onSelect={onSelectSupplier} />
           ))}
         </div>
       ) : (

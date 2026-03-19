@@ -3,9 +3,10 @@ import CategoryDisambiguation from "./components/CategoryDisambiguation";
 import RequestForm from "./components/RequestForm";
 import ValidationBanner from "./components/ValidationBanner";
 import SupplierRankingView from "./components/SupplierRankingView";
+import OrderConfirmationView from "./components/OrderConfirmationView";
 import VoiceConversation from "./components/VoiceConversation";
 import { t } from "./i18n";
-import type { FormData, ValidationResult, RankedSupplierOutput } from "./types";
+import type { FormData, ValidationResult, RankedSupplierOutput, ScoredSupplier, OrderConfirmation } from "./types";
 import type { VoiceInputHandle } from "./components/VoiceInput";
 
 type ConversationPhase = "idle" | "speaking" | "listening" | "processing";
@@ -13,6 +14,8 @@ type ConversationPhase = "idle" | "speaking" | "listening" | "processing";
 export default function App() {
   const [result, setResult] = useState<ValidationResult | null>(null);
   const [ranking, setRanking] = useState<RankedSupplierOutput | null>(null);
+  const [orderConfirmation, setOrderConfirmation] = useState<OrderConfirmation | null>(null);
+  const [orderLoading, setOrderLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [rankingLoading, setRankingLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -148,9 +151,51 @@ export default function App() {
     }
   }
 
+  async function handleSelectSupplier(supplier: ScoredSupplier) {
+    if (!ranking || !formData) return;
+    setOrderLoading(true);
+    try {
+      const body = {
+        request_id: ranking.request_id,
+        category_l1: formData.category_l1,
+        category_l2: formData.category_l2,
+        quantity: formData.quantity ?? supplier.unit_price,
+        unit_of_measure: formData.unit_of_measure || "unit",
+        currency: "EUR",
+        delivery_country: formData.delivery_address?.split(",").pop()?.trim() ?? "DE",
+        required_by_date: formData.required_by_date || null,
+        selected_supplier_id: supplier.supplier_id,
+        selected_supplier_name: supplier.supplier_name,
+        unit_price: supplier.unit_price,
+        total_price: supplier.total_price,
+        pricing_tier_applied: supplier.pricing_tier_applied,
+        approval_threshold_id: ranking.approval_threshold_id,
+        approval_threshold_note: ranking.approval_threshold_note,
+        quotes_required: ranking.quotes_required,
+        notes: null,
+      };
+      const res = await fetch("/api/order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        const conf: OrderConfirmation = await res.json();
+        setOrderConfirmation(conf);
+      } else {
+        setError("Failed to place order. Please try again.");
+      }
+    } catch {
+      setError(i.networkError);
+    } finally {
+      setOrderLoading(false);
+    }
+  }
+
   function handleNewRequest() {
     setResult(null);
     setRanking(null);
+    setOrderConfirmation(null);
     setError(null);
     setFormData(null);
     setVoiceMode(false);
@@ -224,20 +269,31 @@ export default function App() {
           </div>
         )}
 
-        {(loading || rankingLoading) && (
+        {(loading || rankingLoading || orderLoading) && (
           <div className="flex flex-col items-center gap-4 py-16">
             <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
-            <p className="text-gray-600">{rankingLoading ? "Finding best suppliers…" : i.analyzing}</p>
+            <p className="text-gray-600">
+              {orderLoading ? "Placing order…" : rankingLoading ? "Finding best suppliers…" : i.analyzing}
+            </p>
           </div>
         )}
 
+        {/* Order confirmation */}
+        {!loading && !rankingLoading && !orderLoading && orderConfirmation && (
+          <OrderConfirmationView confirmation={orderConfirmation} onNewRequest={handleNewRequest} />
+        )}
+
         {/* Approved + ranking loaded */}
-        {!loading && !rankingLoading && isApproved && ranking && (
-          <SupplierRankingView result={ranking} onNewRequest={handleNewRequest} />
+        {!loading && !rankingLoading && !orderLoading && !orderConfirmation && isApproved && ranking && (
+          <SupplierRankingView
+            result={ranking}
+            onNewRequest={handleNewRequest}
+            onSelectSupplier={handleSelectSupplier}
+          />
         )}
 
         {/* Approved but ranking still loading or failed silently */}
-        {!loading && !rankingLoading && isApproved && !ranking && (
+        {!loading && !rankingLoading && !orderLoading && !orderConfirmation && isApproved && !ranking && (
           <div className="flex flex-col items-center gap-6 py-16">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
               <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
