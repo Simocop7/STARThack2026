@@ -1,4 +1,5 @@
 import type { ScoredSupplier, RankedSupplierOutput, FormData } from "../types";
+import { PLATFORMS } from "./platforms";
 
 interface Props {
   supplier: ScoredSupplier;
@@ -121,6 +122,34 @@ export default function OrderRecapView({ supplier, ranking, formData, deliveryCo
           <div className="pb-2" />
         </section>
       )}
+
+      {/* Contact platforms */}
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+          <span className="text-base">🔗</span>
+          <span className="text-sm font-semibold text-gray-700">Contact Suppliers Directly</span>
+          <span className="text-xs text-gray-400 ml-1">— via external procurement platforms</span>
+        </div>
+        <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {PLATFORMS.map((p) => (
+            <a
+              key={p.name}
+              href={p.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex flex-col gap-1.5 border border-gray-200 rounded-xl p-3 transition-all bg-white ${p.color}`}
+            >
+              <span className="text-xl">{p.icon}</span>
+              <span className={`text-xs font-bold ${p.labelColor}`}>{p.name}</span>
+              <span className="text-[10px] text-gray-500 leading-tight">{p.description}</span>
+              <span className="text-[10px] text-gray-400 mt-auto">Open ↗</span>
+            </a>
+          ))}
+        </div>
+        <p className="px-4 pb-3 text-[10px] text-gray-400">
+          Supplier negotiations must be conducted through your company's approved channels.
+        </p>
+      </div>
 
       {/* Action buttons */}
       <div className="space-y-3 pt-1 pb-6">

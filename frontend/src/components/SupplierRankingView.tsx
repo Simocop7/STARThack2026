@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { RankedSupplierOutput, ScoredSupplier, Escalation, RawScores, FormData } from "../types";
+import { PLATFORMS } from "./platforms";
 
 interface Props {
   result: RankedSupplierOutput;
@@ -229,9 +230,9 @@ function SupplierCard({
           weight={weights.price}
           hint="100 = cheapest, others proportional"
         />
-        {/* Quality / Trustworthiness / ESG: exact 0-100 values from dataset */}
+        {/* Quality / Trust / ESG: exact 0-100 values from dataset */}
         <ScoreBar label="Quality" value={raw.quality} color="bg-blue-500" weight={weights.quality} />
-        <ScoreBar label="Trustworthiness" value={100 - raw.risk} barPct={100 - raw.risk} color="bg-amber-500" weight={weights.risk} hint="higher = better" />
+        <ScoreBar label="Trust" value={100 - raw.risk} barPct={100 - raw.risk} color="bg-amber-500" weight={weights.risk} hint="higher = better" />
         <ScoreBar label="ESG" value={raw.esg} color="bg-green-500" weight={weights.esg} />
         {/* Lead time: display actual days; bar shows deadline compliance (100=on time, 50=expedited only, 0=infeasible) */}
         <ScoreBar
@@ -244,7 +245,7 @@ function SupplierCard({
           hint="days to deliver"
         />
         <p className="text-xs text-gray-400 pt-1">
-          Quality, Trustworthiness &amp; ESG are 0–100 (higher = better). Price: 100 = cheapest, others = cheapest ÷ their price × 100. Lead time bar shows deadline compliance; days are actual delivery days.
+          Quality, Trust &amp; ESG are 0–100 (higher = better). Price: 100 = cheapest, others = cheapest ÷ their price × 100. Lead time bar shows deadline compliance; days are actual delivery days.
         </p>
       </div>
 
@@ -395,7 +396,7 @@ const PARAMS: ParamMeta[] = [
     bgCls: "bg-amber-50",
     barColor: "bg-amber-500",
     winner: (r) => r.reduce((a, b) => a.raw_scores.risk <= b.raw_scores.risk ? a : b),
-    displayValue: (s) => `Trustworthiness ${100 - s.raw_scores.risk}/100`,
+    displayValue: (s) => `Trust ${100 - s.raw_scores.risk}/100`,
     hint: "higher = better",
   },
   {
@@ -441,7 +442,7 @@ function computeWinners(ranking: ScoredSupplier[]): Map<string, ParamKey[]> {
 const SCORE_LABEL: Record<ParamKey, string> = {
   price: "Price",
   quality: "Quality",
-  risk: "Trustworthiness",
+  risk: "Trust",
   esg: "ESG",
   lead_time: "Delivery",
 };
@@ -451,11 +452,13 @@ function BestInCategoryCard({
   wonParams,
   currency,
   onSelect,
+  isEmployeeRequested = false,
 }: {
   supplier: ScoredSupplier;
   wonParams: ParamKey[];
   currency: string;
   onSelect: (s: ScoredSupplier) => void;
+  isEmployeeRequested?: boolean;
 }) {
   const [showScores, setShowScores] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -469,7 +472,9 @@ function BestInCategoryCard({
   return (
     <div
       className={`border-2 rounded-xl bg-white overflow-hidden transition-shadow hover:shadow-md flex flex-col ${
-        isOverall ? "border-blue-400 shadow-blue-100 shadow-sm" : accent.borderCls
+        isOverall ? "border-blue-400 shadow-blue-100 shadow-sm"
+        : isEmployeeRequested && wonMeta.length === 0 ? "border-violet-300"
+        : accent.borderCls
       }`}
     >
       {/* ── Won-param badges ── */}
@@ -495,6 +500,9 @@ function BestInCategoryCard({
             {supplier.supplier_id} · {fmtTier(supplier.pricing_tier_applied)}
           </p>
           <div className="flex gap-1 mt-1.5 flex-wrap">
+            {isEmployeeRequested && (
+              <span className="text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full font-semibold">👤 Employee request</span>
+            )}
             {supplier.is_preferred && (
               <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">Preferred</span>
             )}
@@ -719,12 +727,12 @@ function ScoringMethodologyPanel({ weights }: { weights: { price: number; qualit
     },
     {
       key: "risk",
-      label: "Trustworthiness",
+      label: "Trust",
       icon: "🤝",
       weight: weights.risk,
       color: "text-amber-700",
       bg: "bg-amber-50 border-amber-200",
-      how: "Derived from the supplier's raw risk score (0–100) by inversion: Trustworthiness = 100 − risk_score. A risk score of 20 becomes a trustworthiness of 80. This ensures a higher bar always means a safer, more reliable supplier — consistent with all other dimensions.",
+      how: "Derived from the supplier's raw risk score (0–100) by inversion: Trust = 100 − risk_score. A risk score of 20 becomes a trustworthiness of 80. This ensures a higher bar always means a safer, more reliable supplier — consistent with all other dimensions.",
     },
     {
       key: "esg",
@@ -842,48 +850,6 @@ function ScoringMethodologyPanel({ weights }: { weights: { price: number; qualit
 
 // ── Contact platforms footer ─────────────────────────────────────────
 
-const PLATFORMS = [
-  {
-    name: "SAP Ariba",
-    description: "Supplier discovery & sourcing events",
-    icon: "🔷",
-    url: "https://service.ariba.com/Supplier.aw/109537048/aw?awh=r&awssk=YV_gM3EE&dard=1",
-    color: "hover:border-blue-300 hover:bg-blue-50",
-    labelColor: "text-blue-700",
-  },
-  {
-    name: "Coupa",
-    description: "Procurement & supplier management",
-    icon: "🟠",
-    url: "https://supplier.coupahost.com/sessions/new",
-    color: "hover:border-orange-300 hover:bg-orange-50",
-    labelColor: "text-orange-700",
-  },
-  {
-    name: "Archlet",
-    description: "Sourcing optimisation & analytics",
-    icon: "🟣",
-    url: "https://www.archlet.io/",
-    color: "hover:border-purple-300 hover:bg-purple-50",
-    labelColor: "text-purple-700",
-  },
-  {
-    name: "Apadua",
-    description: "Strategic category management",
-    icon: "🟢",
-    url: "https://apadua.com/",
-    color: "hover:border-green-300 hover:bg-green-50",
-    labelColor: "text-green-700",
-  },
-  {
-    name: "Keelvar",
-    description: "AI-powered sourcing automation",
-    icon: "🔵",
-    url: "https://www.keelvar.com/",
-    color: "hover:border-cyan-300 hover:bg-cyan-50",
-    labelColor: "text-cyan-700",
-  },
-];
 
 function ContactPlatforms() {
   return (
@@ -931,27 +897,21 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
     ? Math.min(...result.ranking.map((s) => s.total_price))
     : null;
 
-  // Build winner map: supplierId → params won
+  // Build winner map: supplierId → params won (for highlighting)
   const winnerMap = computeWinners(result.ranking);
 
-  // Unique suppliers that won at least one param, ordered by most wins then by rank
-  const winnerSuppliers: ScoredSupplier[] = [];
-  const seen = new Set<string>();
-  // iterate in param order so the first card is always the overall #1
-  const overallBest = result.ranking[0];
-  if (overallBest) {
-    winnerSuppliers.push(overallBest);
-    seen.add(overallBest.supplier_id);
-  }
-  for (const [supplierId] of winnerMap) {
-    if (!seen.has(supplierId)) {
-      const sup = result.ranking.find((s) => s.supplier_id === supplierId);
-      if (sup) {
-        winnerSuppliers.push(sup);
-        seen.add(supplierId);
-      }
-    }
-  }
+  // Show top 3 ranked suppliers
+  const top3 = result.ranking.slice(0, 3);
+
+  // If the employee specified a preferred supplier, append it if not already in top 3
+  const preferredName = orderContext?.preferred_supplier?.trim().toLowerCase();
+  const preferredExtra: ScoredSupplier | null = preferredName
+    ? result.ranking.find(
+        (s) => s.rank > 3 && s.supplier_name.toLowerCase().includes(preferredName)
+      ) ?? null
+    : null;
+
+  const displaySuppliers: ScoredSupplier[] = preferredExtra ? [...top3, preferredExtra] : top3;
 
   return (
     <div className="space-y-5">
@@ -1079,20 +1039,24 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
         </div>
       )}
 
-      {/* Best-per-parameter cards — horizontal scroll */}
+      {/* Top-3 supplier cards — horizontal scroll */}
       {result.ranking.length > 0 ? (
         <div>
           <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">
-            Supplier Comparison
+            Top Suppliers
+            <span className="ml-2 text-xs font-normal text-gray-400 normal-case">
+              showing top {top3.length}{preferredExtra ? " + employee-requested" : ""}
+            </span>
           </h3>
           <div className="flex gap-4 overflow-x-auto pb-3 -mx-1 px-1">
-            {winnerSuppliers.map((supplier) => (
+            {displaySuppliers.map((supplier) => (
               <div key={supplier.supplier_id} className="min-w-[300px] max-w-[340px] flex-shrink-0">
                 <BestInCategoryCard
                   supplier={supplier}
                   wonParams={winnerMap.get(supplier.supplier_id) ?? []}
                   currency={currency}
                   onSelect={onSelectSupplier}
+                  isEmployeeRequested={supplier.supplier_id === preferredExtra?.supplier_id}
                 />
               </div>
             ))}
