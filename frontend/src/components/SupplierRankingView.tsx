@@ -921,6 +921,7 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
             suppliers={result.ranking}
             currency={currency}
             onSelectSupplier={onSelectSupplier}
+            onOpenDetail={setDetailSupplier}
           />
         </div>
       )}

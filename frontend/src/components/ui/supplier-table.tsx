@@ -10,6 +10,7 @@ interface SupplierTableProps {
   currency?: string;
   className?: string;
   onSelectSupplier?: (s: ScoredSupplier) => void;
+  onOpenDetail?: (s: ScoredSupplier) => void;
 }
 
 function ScoreChip({ value }: { value: number }) {
@@ -56,6 +57,7 @@ export function SupplierTable({
   currency = "EUR",
   className = "",
   onSelectSupplier,
+  onOpenDetail,
 }: SupplierTableProps) {
   const top10 = suppliers.slice(0, 10);
 
@@ -323,7 +325,13 @@ export function SupplierTable({
                         {/* Detail button */}
                         <div className="px-2 flex items-center justify-center">
                           <button
-                            onClick={() => setSelectedDetail(supplier)}
+                            onClick={() => {
+                              if (onOpenDetail) {
+                                onOpenDetail(supplier);
+                                return;
+                              }
+                              setSelectedDetail(supplier);
+                            }}
                             className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity text-gray-500 cursor-pointer"
                           >
                             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
@@ -342,9 +350,9 @@ export function SupplierTable({
           </div>
         </div>
 
-        {/* Detail popup modal */}
+        {/* Detail popup modal (fallback when external detail modal is not provided) */}
         <AnimatePresence>
-          {selectedDetail && (
+          {!onOpenDetail && selectedDetail && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
