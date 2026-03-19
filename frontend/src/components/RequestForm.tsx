@@ -191,17 +191,26 @@ export default function RequestForm({
 
       const parsed = await res.json();
 
+      // Sanitize parsed voice data before merging
+      const safeQuantity = (parsed.quantity != null && Number.isInteger(parsed.quantity) && parsed.quantity >= 1)
+        ? parsed.quantity : null;
+      const safeCountry = (parsed.delivery_country && parsed.delivery_country in VALID_COUNTRY_CODES)
+        ? parsed.delivery_country : null;
+      const today = new Date().toISOString().split("T")[0];
+      const safeDate = (parsed.required_by_date && parsed.required_by_date >= today)
+        ? parsed.required_by_date : null;
+
       // Merge parsed fields into form, preserving existing non-empty values
       let updatedForm: FormData = formRef.current;
       setForm((prev) => {
         const updated = {
           ...prev,
           request_text: prev.request_text || parsed.request_text || transcript,
-          quantity: parsed.quantity ?? prev.quantity,
+          quantity: safeQuantity ?? prev.quantity,
           unit_of_measure: parsed.unit_of_measure || prev.unit_of_measure,
-          required_by_date: parsed.required_by_date || prev.required_by_date,
+          required_by_date: safeDate || prev.required_by_date,
           preferred_supplier: parsed.preferred_supplier || prev.preferred_supplier,
-          delivery_country: parsed.delivery_country || prev.delivery_country,
+          delivery_country: safeCountry || prev.delivery_country,
         };
         formRef.current = updated;
         updatedForm = updated;
@@ -236,13 +245,38 @@ export default function RequestForm({
     onRegisterForceTranscript?.((transcript: string) => handleVoiceTranscriptRef.current(transcript));
   }, [onRegisterForceTranscript]);
 
+  const [formErrors, setFormErrors] = useState<string[]>([]);
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    // Programmatic validation (defense-in-depth beyond HTML5 required)
+    const errors: string[] = [];
+    if (!form.request_text.trim()) errors.push(i.requestDescription);
+    if (form.quantity === null || form.quantity < 1) errors.push(i.quantity);
+    if (!form.delivery_country || !(form.delivery_country in VALID_COUNTRY_CODES)) errors.push(i.deliveryCountry);
+    if (!form.required_by_date) errors.push(i.requiredByDate);
+
+    if (errors.length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+    setFormErrors([]);
     onSubmit(form);
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {formErrors.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+          <p className="font-medium">{i.voiceMissingFields}</p>
+          <ul className="mt-1 list-disc list-inside">
+            {formErrors.map((field) => (
+              <li key={field}>{field}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {loadError && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
           {loadError}
@@ -484,7 +518,7 @@ export default function RequestForm({
           <input
             required
             type="date"
-            min="2020-01-01"
+            min={new Date().toISOString().split("T")[0]}
             max="9999-12-31"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
             value={form.required_by_date}

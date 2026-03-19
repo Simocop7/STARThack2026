@@ -26,6 +26,20 @@ import {
  * This matches the user's actual fallback path and keeps tests deterministic.
  */
 
+/** Navigate through role selection to the Employee portal. */
+async function goToEmployeePortal(page: import("@playwright/test").Page) {
+  await page.goto("/");
+  await page.waitForSelector("text=Select your role to continue", {
+    state: "visible",
+    timeout: 10_000,
+  });
+  await page.getByRole("button", { name: /Employee/i }).first().click();
+  await page.waitForSelector("text=Employee Portal", {
+    state: "visible",
+    timeout: 10_000,
+  });
+}
+
 test.describe("Voice Mode", () => {
   test.beforeEach(async ({ page }) => {
     await mockVoiceAPIs(page);
@@ -44,8 +58,7 @@ test.describe("Voice Mode", () => {
       route.fulfill({ json: RANKED_SUPPLIER_RESULT })
     );
 
-    await page.goto("/");
-    await page.getByRole("heading", { name: "Smart Procurement" }).waitFor();
+    await goToEmployeePortal(page);
 
     // Start voice input
     await page.getByRole("button", { name: "Voice Input" }).click();
@@ -98,8 +111,7 @@ test.describe("Voice Mode", () => {
       route.fulfill({ json: EMPTY_RANKED_RESULT })
     );
 
-    await page.goto("/");
-    await page.getByRole("heading", { name: "Smart Procurement" }).waitFor();
+    await goToEmployeePortal(page);
 
     // Switch to French
     await page.getByRole("button", { name: "Français" }).click();
@@ -167,8 +179,7 @@ test.describe("Voice Mode", () => {
       route.fulfill({ json: RANKED_SUPPLIER_RESULT })
     );
 
-    await page.goto("/");
-    await page.getByRole("heading", { name: "Smart Procurement" }).waitFor();
+    await goToEmployeePortal(page);
 
     // First voice input
     await page.getByRole("button", { name: "Voice Input" }).click();
@@ -241,8 +252,7 @@ test.describe("Voice Mode", () => {
       route.fulfill({ json: INVALID_VALIDATION_RESULT })
     );
 
-    await page.goto("/");
-    await page.getByRole("heading", { name: "Smart Procurement" }).waitFor();
+    await goToEmployeePortal(page);
 
     await page.getByRole("button", { name: "Voice Input" }).click();
     await simulateVoiceTranscript(
@@ -280,8 +290,7 @@ test.describe("Voice Mode", () => {
       route.fulfill({ json: INVALID_VALIDATION_RESULT })
     );
 
-    await page.goto("/");
-    await page.getByRole("heading", { name: "Smart Procurement" }).waitFor();
+    await goToEmployeePortal(page);
 
     // Start voice and trigger conversation mode
     await page.getByRole("button", { name: "Voice Input" }).click();

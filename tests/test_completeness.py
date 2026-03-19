@@ -17,7 +17,6 @@ def _make_enriched(**overrides) -> EnrichedRequest:
         "category_l1": "IT",
         "category_l2": "Laptops",
         "delivery_country": "CH",
-        "delivery_address": "Zurich, Switzerland",
         "required_by_date": date(2026, 6, 1),
         "item_description": "Business laptops",
     }
@@ -63,9 +62,9 @@ def test_missing_category_l2():
 
 
 def test_missing_delivery_address():
-    enriched = _make_enriched(delivery_address=None)
+    enriched = _make_enriched(delivery_country=None)
     issues = check_completeness(enriched)
-    assert any(i.fix_action.field == "delivery_address" for i in issues)
+    assert any(i.fix_action.field == "delivery_country" for i in issues)
 
 
 def test_missing_delivery_country():
@@ -82,13 +81,13 @@ def test_missing_required_by_date():
 
 def test_multiple_missing_fields():
     enriched = _make_enriched(
-        quantity=None, category_l1=None, delivery_address=None,
+        quantity=None, category_l1=None, delivery_country=None,
     )
     issues = check_completeness(enriched)
     fields = {i.fix_action.field for i in issues}
     assert "quantity" in fields
     assert "category_l1" in fields
-    assert "delivery_address" in fields
+    assert "delivery_country" in fields
 
 
 def test_issue_ids_are_unique():

@@ -302,8 +302,25 @@ export default function EmployeePortal({ onBack }: Props) {
       });
 
       if (!res.ok) {
-        const detail = await res.text();
-        setError(`Validation failed (${res.status}): ${detail}`);
+        let errorMsg: string;
+        if (res.status === 503) {
+          errorMsg = "Our AI service is temporarily busy. Please try again in a moment.";
+        } else if (res.status === 429) {
+          errorMsg = "Too many requests. Please wait a moment and try again.";
+        } else if (res.status === 422) {
+          try {
+            const err = await res.json();
+            const details = err.detail;
+            errorMsg = Array.isArray(details)
+              ? details.map((d: { msg?: string }) => d.msg || "").join("; ")
+              : String(details || "Invalid input. Please check your form.");
+          } catch {
+            errorMsg = "Invalid input. Please check your form fields.";
+          }
+        } else {
+          errorMsg = `Validation failed (${res.status}). Please try again.`;
+        }
+        setError(errorMsg);
         if (voiceMode && !overlayActive) setConversationPhase("idle");
         return;
       }

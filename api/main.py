@@ -220,7 +220,7 @@ class VoiceInput(BaseModel):
         return v
 
 
-@app.post("/api/parse-voice", dependencies=[Depends(verify_api_key)])
+@app.post("/api/parse-voice", response_model=None, dependencies=[Depends(verify_api_key)])
 async def parse_voice(voice: VoiceInput) -> dict | JSONResponse:
     """Parse a voice transcript into structured procurement form fields."""
     from datetime import date as date_mod
@@ -416,16 +416,30 @@ _MAX_EMPLOYEE_REQUESTS = 10_000
 
 class EmployeeFormInput(BaseModel):
     request_text: str = Field(..., min_length=1, max_length=10000)
-    quantity: int | None = None
-    unit_of_measure: str | None = None
-    category_l1: str | None = None
-    category_l2: str | None = None
-    delivery_country: str | None = None
-    required_by_date: str | None = None
-    preferred_supplier: str | None = None
+    quantity: int | None = Field(None, ge=1, le=1_000_000)
+    unit_of_measure: str | None = Field(None, max_length=100)
+    category_l1: str | None = Field(None, max_length=100)
+    category_l2: str | None = Field(None, max_length=100)
+    delivery_country: str | None = Field(None, max_length=3)
+    required_by_date: str | None = Field(None, max_length=10)
+    preferred_supplier: str | None = Field(None, max_length=200)
     language: str = "en"
     validated: bool = False
     enriched_data: dict | None = None
+
+    @field_validator("request_text")
+    @classmethod
+    def sanitize_request_text(cls, v: str) -> str:
+        from api.models import _sanitize_text
+        return _sanitize_text(v)
+
+    @field_validator("preferred_supplier")
+    @classmethod
+    def sanitize_preferred_supplier(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        from api.models import _strip_html_tags
+        return _strip_html_tags(v) or None
 
 
 @app.post("/api/employee/submit", dependencies=[Depends(verify_api_key)])

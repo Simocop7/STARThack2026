@@ -174,6 +174,17 @@ export async function mockVoiceAPIs(page: Page): Promise<void> {
       json: { detail: "Request not found" },
     });
   });
+
+  // Employee portal endpoints
+  await page.route("**/api/employee/submit", (route) =>
+    route.fulfill({ json: { request_id: "REQ-VOICE-001" } })
+  );
+  await page.route("**/api/employee/requests", (route) =>
+    route.fulfill({ json: { requests: [] } })
+  );
+  await page.route("**/api/employee/requests/**", (route) =>
+    route.fulfill({ json: { ok: true } })
+  );
 }
 
 /**

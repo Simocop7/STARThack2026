@@ -141,9 +141,16 @@ const ORDER_CONFIRMATION_MOCK = {
 // Helper to navigate to procurement portal
 async function goToProcurementPortal(page: import("@playwright/test").Page) {
   await page.goto("/");
-  await page
-    .getByRole("button", { name: /Procurement Office/i })
-    .click();
+  await page.waitForSelector("text=Select your role to continue", {
+    state: "visible",
+    timeout: 10_000,
+  });
+  await page.getByRole("button", { name: /Procurement Office/i }).click();
+  // Wait for the procurement portal to fully render
+  await page.waitForSelector("text=Incoming Requests", {
+    state: "visible",
+    timeout: 10_000,
+  });
 }
 
 // ── Inbox ─────────────────────────────────────────────────────────────────

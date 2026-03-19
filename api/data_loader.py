@@ -205,13 +205,27 @@ class DataStore:
         return cls._instance
 
     def get_supplier_id(self, name: str) -> str | None:
-        """Fuzzy-ish lookup: exact lower-case match first, then substring."""
+        """Fuzzy-ish lookup: exact lower-case match first, then substring.
+
+        Safety guards:
+        - Requires at least 3 chars for substring matching
+        - Returns None if multiple suppliers match (ambiguous)
+        """
         lower = name.lower().strip()
+        if not lower:
+            return None
         if lower in self.supplier_by_name:
             return self.supplier_by_name[lower]
+        # Only attempt substring matching for queries >= 3 chars
+        if len(lower) < 3:
+            return None
+        matches: list[str] = []
         for sname, sid in self.supplier_by_name.items():
             if lower in sname or sname in lower:
-                return sid
+                matches.append(sid)
+        # Ambiguous match → return None instead of guessing
+        if len(matches) == 1:
+            return matches[0]
         return None
 
     def get_supplier_name(self, supplier_id: str) -> str | None:

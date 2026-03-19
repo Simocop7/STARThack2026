@@ -6,7 +6,23 @@ from datetime import date
 from enum import Enum
 from typing import Optional
 
+import re
+
 from pydantic import BaseModel, Field, field_validator
+
+
+def _sanitize_text(v: str) -> str:
+    """Strip control chars, collapse excessive newlines, and trim whitespace."""
+    # Remove null bytes and non-printable control chars (keep \n, \t)
+    v = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", v)
+    # Collapse 3+ consecutive newlines into 2
+    v = re.sub(r"\n{3,}", "\n\n", v)
+    return v.strip()
+
+
+def _strip_html_tags(v: str) -> str:
+    """Remove HTML tags to prevent XSS in reflected content."""
+    return re.sub(r"<[^>]+>", "", v).strip()
 
 # --- Enums ---
 
@@ -65,6 +81,18 @@ class FormInput(BaseModel):
     preferred_supplier: Optional[str] = Field(None, max_length=200)
     language: str = "en"  # ISO 639-1 code chosen by user
 
+    @field_validator("request_text")
+    @classmethod
+    def sanitize_request_text(cls, v: str) -> str:
+        return _sanitize_text(v)
+
+    @field_validator("preferred_supplier")
+    @classmethod
+    def sanitize_preferred_supplier(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return _strip_html_tags(v) or None
+
     @field_validator("delivery_country")
     @classmethod
     def validate_delivery_country(cls, v: str | None) -> str | None:
@@ -72,9 +100,7 @@ class FormInput(BaseModel):
             return v
         v = v.upper().strip()
         if v not in _VALID_COUNTRY_CODES:
-            raise ValueError(
-                f"Invalid delivery country code: '{v}'. Must be one of: {', '.join(sorted(_VALID_COUNTRY_CODES))}"
-            )
+            return None  # Silently discard invalid codes instead of crashing
         return v
 
     @field_validator("language")
