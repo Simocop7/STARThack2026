@@ -2,12 +2,15 @@ import { useState } from "react";
 import CategoryDisambiguation from "./components/CategoryDisambiguation";
 import RequestForm from "./components/RequestForm";
 import ValidationBanner from "./components/ValidationBanner";
+import SupplierRankingView from "./components/SupplierRankingView";
 import { t } from "./i18n";
-import type { FormData, ValidationResult } from "./types";
+import type { FormData, ValidationResult, RankedSupplierOutput } from "./types";
 
 export default function App() {
   const [result, setResult] = useState<ValidationResult | null>(null);
+  const [ranking, setRanking] = useState<RankedSupplierOutput | null>(null);
   const [loading, setLoading] = useState(false);
+  const [rankingLoading, setRankingLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData | null>(null);
   const [language, setLanguage] = useState("en");
@@ -19,6 +22,7 @@ export default function App() {
     setLanguage(data.language);
     setLoading(true);
     setResult(null);
+    setRanking(null);
     setError(null);
 
     try {
@@ -64,6 +68,11 @@ export default function App() {
           language: data.language,
         });
       }
+
+      // If valid, auto-trigger ranking
+      if (json.is_valid && json.enriched_request) {
+        await fetchRanking(json.enriched_request);
+      }
     } catch {
       setError(i.networkError);
     } finally {
@@ -71,20 +80,59 @@ export default function App() {
     }
   }
 
+  async function fetchRanking(enriched: Record<string, unknown>) {
+    setRankingLoading(true);
+    try {
+      // Map enriched_request fields → CleanOrderRecap
+      const deliveryCountries = enriched.delivery_countries as string[] | undefined;
+      const deliveryCountry =
+        Array.isArray(deliveryCountries) && deliveryCountries.length > 0
+          ? deliveryCountries[0]
+          : (enriched.country as string) ?? "DE";
+
+      const order = {
+        request_id: (enriched.request_id as string) ?? "REQ-UNKNOWN",
+        category_l1: enriched.category_l1 as string,
+        category_l2: enriched.category_l2 as string,
+        quantity: (enriched.quantity as number) ?? 1,
+        unit_of_measure: (enriched.unit_of_measure as string) ?? "unit",
+        budget_amount: (enriched.budget_amount as number) ?? null,
+        currency: (enriched.currency as string) ?? "EUR",
+        delivery_country: deliveryCountry,
+        required_by_date: (enriched.required_by_date as string) ?? null,
+        data_residency_required: (enriched.data_residency_constraint as boolean) ?? false,
+        esg_requirement: (enriched.esg_requirement as boolean) ?? false,
+        preferred_supplier_id: null,
+        preferred_supplier_name: (enriched.preferred_supplier_mentioned as string) ?? null,
+      };
+
+      const res = await fetch("/api/rank", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(order),
+      });
+
+      if (res.ok) {
+        const rankResult: RankedSupplierOutput = await res.json();
+        setRanking(rankResult);
+      }
+    } catch {
+      // Ranking failure is non-fatal — just don't show ranking
+    } finally {
+      setRankingLoading(false);
+    }
+  }
+
   function handleNewRequest() {
     setResult(null);
+    setRanking(null);
     setError(null);
     setFormData(null);
   }
 
   function handleCategoryConfirm(categoryL1: string, categoryL2: string) {
     if (!formData) return;
-    const updatedForm: FormData = {
-      ...formData,
-      category_l1: categoryL1,
-      category_l2: categoryL2,
-    };
-    handleSubmit(updatedForm);
+    handleSubmit({ ...formData, category_l1: categoryL1, category_l2: categoryL2 });
   }
 
   const isApproved = result?.is_valid === true;
@@ -97,12 +145,8 @@ export default function App() {
             <span className="text-white font-bold text-sm">SP</span>
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">
-              {i.appTitle}
-            </h1>
-            <p className="text-sm text-gray-500">
-              {i.appSubtitle}
-            </p>
+            <h1 className="text-xl font-semibold text-gray-900">{i.appTitle}</h1>
+            <p className="text-sm text-gray-500">{i.appSubtitle}</p>
           </div>
         </div>
       </header>
@@ -111,24 +155,26 @@ export default function App() {
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
             <p className="text-sm text-red-800">{error}</p>
-            <button
-              onClick={() => setError(null)}
-              className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
-            >
+            <button onClick={() => setError(null)} className="mt-2 text-sm text-red-600 hover:text-red-800 underline">
               {i.tryAgain}
             </button>
           </div>
         )}
 
-        {loading && (
+        {(loading || rankingLoading) && (
           <div className="flex flex-col items-center gap-4 py-16">
             <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
-            <p className="text-gray-600">{i.analyzing}</p>
+            <p className="text-gray-600">{rankingLoading ? "Finding best suppliers…" : i.analyzing}</p>
           </div>
         )}
 
-        {/* Approved: show success screen */}
-        {!loading && isApproved && (
+        {/* Approved + ranking loaded */}
+        {!loading && !rankingLoading && isApproved && ranking && (
+          <SupplierRankingView result={ranking} onNewRequest={handleNewRequest} />
+        )}
+
+        {/* Approved but ranking still loading or failed silently */}
+        {!loading && !rankingLoading && isApproved && !ranking && (
           <div className="flex flex-col items-center gap-6 py-16">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
               <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -136,71 +182,27 @@ export default function App() {
               </svg>
             </div>
             <div className="text-center">
-              <h2 className="text-2xl font-semibold text-green-800">
-                {i.requestApproved}
-              </h2>
-              {result?.user_message?.summary ? (
-                <p className="mt-2 text-gray-600 max-w-lg">
-                  {result.user_message.summary}
-                </p>
-              ) : (
-                <p className="mt-2 text-gray-600 max-w-lg">
-                  {i.approvedMessage}
-                </p>
-              )}
+              <h2 className="text-2xl font-semibold text-green-800">{i.requestApproved}</h2>
+              <p className="mt-2 text-gray-600 max-w-lg">{i.approvedMessage}</p>
             </div>
-
-            {/* Enriched JSON collapsible */}
-            {result?.enriched_request && (
-              <div className="w-full border border-gray-200 rounded-lg">
-                <button
-                  className="w-full px-4 py-3 text-left text-sm font-medium text-gray-700 bg-gray-50 rounded-t-lg hover:bg-gray-100"
-                  onClick={(e) => {
-                    const target = e.currentTarget.nextElementSibling;
-                    if (target) target.classList.toggle("hidden");
-                  }}
-                >
-                  {i.enrichedJson}
-                </button>
-                <pre className="hidden px-4 py-3 text-xs text-gray-600 overflow-auto max-h-96 bg-white rounded-b-lg">
-                  {JSON.stringify(result.enriched_request, null, 2)}
-                </pre>
-              </div>
-            )}
-
-            <button
-              onClick={handleNewRequest}
-              className="bg-blue-600 text-white rounded-lg px-6 py-3 font-medium hover:bg-blue-700 transition-colors"
-            >
+            <button onClick={handleNewRequest} className="bg-blue-600 text-white rounded-lg px-6 py-3 font-medium hover:bg-blue-700 transition-colors">
               {i.newRequest}
             </button>
           </div>
         )}
 
-        {/* Category disambiguation step */}
+        {/* Category disambiguation */}
         {!loading && result?.category_suggestion?.needs_disambiguation && (
-          <CategoryDisambiguation
-            suggestion={result.category_suggestion}
-            lang={language}
-            onConfirm={handleCategoryConfirm}
-          />
+          <CategoryDisambiguation suggestion={result.category_suggestion} lang={language} onConfirm={handleCategoryConfirm} />
         )}
 
-        {/* Not approved or no result: show form (with banner if invalid) */}
-        {!loading && !isApproved && (
+        {/* Invalid: show banner + form */}
+        {!loading && !rankingLoading && !isApproved && (
           <>
             {result && !result.category_suggestion?.needs_disambiguation && (
-              <ValidationBanner
-                result={result}
-                lang={language}
-              />
+              <ValidationBanner result={result} lang={language} />
             )}
-
-            <RequestForm
-              onSubmit={handleSubmit}
-              initialData={formData}
-              onLanguageChange={setLanguage}
-            />
+            <RequestForm onSubmit={handleSubmit} initialData={formData} onLanguageChange={setLanguage} />
           </>
         )}
       </main>

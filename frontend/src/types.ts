@@ -1,3 +1,83 @@
+// ── Supplier Ranking Types ─────────────────────────────────────────
+
+export interface ScoringWeights {
+  price: number;
+  quality: number;
+  risk: number;
+  esg: number;
+  lead_time: number;
+}
+
+export interface ScoreBreakdown {
+  price_score: number;
+  quality_score: number;
+  risk_score: number;
+  esg_score: number;
+  lead_time_score: number;
+}
+
+export interface ComplianceCheck {
+  rule_id: string;
+  rule_description: string;
+  result: "pass" | "fail" | "warning" | "not_applicable";
+  detail: string;
+}
+
+export interface ScoredSupplier {
+  rank: number;
+  supplier_id: string;
+  supplier_name: string;
+  is_preferred: boolean;
+  is_incumbent: boolean;
+  meets_lead_time: boolean;
+  pricing_tier_applied: string;
+  unit_price: number;
+  total_price: number;
+  expedited_unit_price: number | null;
+  expedited_total_price: number | null;
+  standard_lead_time_days: number;
+  expedited_lead_time_days: number | null;
+  score_breakdown: ScoreBreakdown;
+  composite_score: number;
+  compliance_checks: ComplianceCheck[];
+  recommendation_note: string;
+}
+
+export interface ExcludedSupplier {
+  supplier_id: string;
+  supplier_name: string;
+  reason: string;
+}
+
+export interface Escalation {
+  rule_id: string;
+  trigger: string;
+  escalate_to: string;
+  blocking: boolean;
+  detail: string;
+}
+
+export interface RankedSupplierOutput {
+  request_id: string;
+  ranked_at: string;
+  method_used: "deterministic" | "llm_fallback" | "hybrid";
+  k: number;
+  scoring_weights: ScoringWeights;
+  ranking: ScoredSupplier[];
+  excluded: ExcludedSupplier[];
+  escalations: Escalation[];
+  budget_sufficient: boolean | null;
+  minimum_total_cost: number | null;
+  minimum_cost_supplier: string | null;
+  approval_threshold_id: string | null;
+  approval_threshold_note: string | null;
+  quotes_required: number | null;
+  policies_checked: string[];
+  llm_fallback_reason: string | null;
+}
+
+// ── Form Types ─────────────────────────────────────────────────────
+
 export interface FormData {
   request_text: string;
   quantity: number | null;
