@@ -78,7 +78,7 @@ export default function PendingRequestsView({ onProcess, onRefuse, onNewManual }
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="app-title-secondary">Incoming Requests</h2>
+          <h2 className="app-title-primary">Incoming Requests</h2>
           <p className="mt-1 text-sm text-gray-500">
             Select an employee request to validate and process.
           </p>

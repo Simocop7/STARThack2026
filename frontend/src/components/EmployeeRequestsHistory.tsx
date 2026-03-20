@@ -116,7 +116,7 @@ export default function EmployeeRequestsHistory() {
     <div className="bg-white min-h-full py-8 px-6">
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
-          <h2 className="app-title-secondary">Requests History</h2>
+          <h2 className="app-title-primary">Requests History</h2>
           <p className="text-sm text-gray-500 mt-1">
             Your submitted requests, latest first.
           </p>

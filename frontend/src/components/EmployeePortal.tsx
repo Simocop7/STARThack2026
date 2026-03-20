@@ -597,7 +597,7 @@ export default function EmployeePortal({ onBack }: Props) {
             )}
 
             <div className="mb-6">
-              <h2 className="app-title-secondary">New Procurement Request</h2>
+              <h2 className="app-title-primary">New Procurement Request</h2>
               <p className="mt-1 text-sm text-gray-500">
                 Describe what you need in plain language. Your request will be validated before submission.
               </p>

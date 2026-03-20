@@ -650,7 +650,7 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <h2 className="app-title-secondary">Supplier Ranking</h2>
+            <h2 className="app-title-primary">Supplier Ranking</h2>
             <MethodBadge method={result.method_used} />
           </div>
           <p className="text-sm text-gray-500">

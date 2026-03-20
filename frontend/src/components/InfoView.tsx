@@ -157,7 +157,7 @@ export default function InfoView() {
       {/* ── Section 1: Scoring Methodology ── */}
       <div>
         <div className="mb-1">
-          <h2 className="app-title-secondary">Scoring Methodology</h2>
+          <h2 className="app-title-primary">Scoring Methodology</h2>
           <p className="text-sm text-gray-500 mt-0.5">How suppliers are ranked — all dimensions normalised to 0–100 before weighting</p>
         </div>
 
@@ -214,7 +214,7 @@ export default function InfoView() {
       {/* ── Section 2: Audit Trail — Policy Checks ── */}
       <div>
         <div className="mb-1">
-          <h2 className="app-title-secondary">Audit Trail — Policy Checks</h2>
+          <h2 className="app-title-primary">Audit Trail — Policy Checks</h2>
           <p className="text-sm text-gray-500 mt-0.5">Every request is evaluated against all six policy sections before a recommendation is issued</p>
         </div>
 

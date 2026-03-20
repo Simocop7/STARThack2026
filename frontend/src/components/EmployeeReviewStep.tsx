@@ -80,7 +80,7 @@ export default function EmployeeReviewStep({
             />
           </svg>
         </div>
-        <h2 className="app-title-secondary">{i.reviewTitle}</h2>
+        <h2 className="app-title-primary">{i.reviewTitle}</h2>
         <p className="mt-1 text-sm text-gray-500">{i.reviewSubtitle}</p>
       </div>
 
