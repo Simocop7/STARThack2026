@@ -185,7 +185,7 @@ const Scene = () => {
 
 export const Html = () => {
   const titleWords = 'Empower Procurement'.split(' ');
-  const subtitle = 'AI-powered creativity for the next generation.';
+  const subtitle = 'Smarter sourcing. Clearer reasoning. Zero guesswork.';
   const [visibleWords, setVisibleWords] = useState(0);
   const [subtitleVisible, setSubtitleVisible] = useState(false);
   const [delays, setDelays] = useState<number[]>([]);
