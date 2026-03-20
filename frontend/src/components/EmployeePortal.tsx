@@ -53,6 +53,15 @@ export default function EmployeePortal({ onBack }: Props) {
   const [overlayActive, setOverlayActive] = useState(false);
   const [overlayPhase, setOverlayPhase] = useState<OverlayPhase>("listening");
   const [interimTranscript, setInterimTranscript] = useState("");
+  // Refs that always hold the latest values — used inside callbacks to avoid stale closures
+  const overlayActiveRef = useRef(false);
+  const overlayPhaseRef = useRef<OverlayPhase>("listening");
+  const voiceModeRef = useRef(false);
+
+  // Keep refs in sync with state so callbacks always read the current value
+  overlayActiveRef.current = overlayActive;
+  overlayPhaseRef.current = overlayPhase;
+  voiceModeRef.current = voiceMode;
 
   const volumeLevel = useAudioAnalyser(overlayActive);
   const forceTranscriptRef = useRef<((transcript: string) => void) | null>(null);
@@ -66,6 +75,8 @@ export default function EmployeePortal({ onBack }: Props) {
   const watchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Count consecutive empty-end restarts to avoid infinite loops
   const emptyEndCountRef = useRef(0);
+  // Timer for the delayed mic-restart in handleEmptyEnd — tracked so it can be cancelled
+  const emptyEndRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const i = t(language);
 
@@ -74,12 +85,12 @@ export default function EmployeePortal({ onBack }: Props) {
   const startWatchdog = useCallback(() => {
     if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
     watchdogTimerRef.current = setTimeout(() => {
-      if (overlayActive && overlayPhase === "listening" && !micActiveRef.current) {
+      if (overlayActiveRef.current && overlayPhaseRef.current === "listening" && !micActiveRef.current) {
         console.warn("[VoiceWatchdog] Mic not active during listening phase — restarting");
         voiceInputRef.current?.startListening();
       }
     }, 2500);
-  }, [overlayActive, overlayPhase]);
+  }, []);
 
   // Clear watchdog on unmount
   useEffect(() => {
@@ -103,7 +114,7 @@ export default function EmployeePortal({ onBack }: Props) {
   // This happens when: no-speech timeout, background noise only, mic cut off
   // In overlay mode, automatically restart listening (up to a limit)
   const handleEmptyEnd = useCallback(() => {
-    if (!overlayActive || overlayPhase !== "listening") return;
+    if (!overlayActiveRef.current || overlayPhaseRef.current !== "listening") return;
 
     emptyEndCountRef.current += 1;
     if (emptyEndCountRef.current > 5) {
@@ -112,14 +123,16 @@ export default function EmployeePortal({ onBack }: Props) {
       return;
     }
 
-    // Restart listening after a brief pause
-    setTimeout(() => {
-      if (overlayActive && overlayPhase === "listening") {
+    // Restart listening after a brief pause — tracked so close/stop can cancel it
+    if (emptyEndRestartTimerRef.current) clearTimeout(emptyEndRestartTimerRef.current);
+    emptyEndRestartTimerRef.current = setTimeout(() => {
+      emptyEndRestartTimerRef.current = null;
+      if (overlayActiveRef.current && overlayPhaseRef.current === "listening") {
         voiceInputRef.current?.startListening();
         startWatchdog();
       }
     }, 400);
-  }, [overlayActive, overlayPhase, startWatchdog]);
+  }, [startWatchdog]);
 
   // ── Activate voice overlay (one-shot flow) ──────────────────
   const handleActivateVoice = useCallback(() => {
@@ -150,6 +163,10 @@ export default function EmployeePortal({ onBack }: Props) {
     if (watchdogTimerRef.current) {
       clearTimeout(watchdogTimerRef.current);
       watchdogTimerRef.current = null;
+    }
+    if (emptyEndRestartTimerRef.current) {
+      clearTimeout(emptyEndRestartTimerRef.current);
+      emptyEndRestartTimerRef.current = null;
     }
     setTimeout(() => {
       setOverlayActive(false);
@@ -211,9 +228,9 @@ export default function EmployeePortal({ onBack }: Props) {
 
   // ── Called when TTS playback ends ───────────────────────────
   const handlePlaybackEnd = useCallback(() => {
-    if (!voiceMode) return;
+    if (!voiceModeRef.current) return;
 
-    if (overlayActive) {
+    if (overlayActiveRef.current) {
       if (pendingFollowUpRef.current) {
         // Follow-up question was asked — re-open listening for the answer
         setOverlayPhase("listening");
@@ -250,7 +267,7 @@ export default function EmployeePortal({ onBack }: Props) {
     setTimeout(() => {
       voiceInputRef.current?.startListening();
     }, 300);
-  }, [voiceMode, overlayActive, result?.is_valid, startWatchdog]);
+  }, [result?.is_valid, startWatchdog]);
 
   const handleVoiceStop = useCallback(() => {
     setVoiceMode(false);
@@ -262,6 +279,10 @@ export default function EmployeePortal({ onBack }: Props) {
     if (watchdogTimerRef.current) {
       clearTimeout(watchdogTimerRef.current);
       watchdogTimerRef.current = null;
+    }
+    if (emptyEndRestartTimerRef.current) {
+      clearTimeout(emptyEndRestartTimerRef.current);
+      emptyEndRestartTimerRef.current = null;
     }
     voiceInputRef.current?.stopListening();
   }, []);

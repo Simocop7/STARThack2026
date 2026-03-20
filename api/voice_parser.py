@@ -46,6 +46,14 @@ _VOICE_TOOL_SCHEMA = {
                     "type": ["string", "null"],
                     "description": "ISO country code for delivery (e.g. DE, CH, US, FR). If user says a city name, map to country code. If user says a country name, convert to code. Valid codes: DE, FR, NL, BE, AT, IT, ES, PL, UK, CH, US, CA, BR, MX, SG, AU, IN, JP, UAE, ZA. Null if not mentioned.",
                 },
+                "budget_amount": {
+                    "type": ["number", "null"],
+                    "description": "Budget amount as a number (e.g. 5000 for '5000 euros', 10000 for '10k', 2500 for '2.5K'). Extract only the numeric value; ignore currency symbol. Null if not mentioned.",
+                },
+                "currency": {
+                    "type": ["string", "null"],
+                    "description": "Currency code if mentioned (EUR, CHF, USD, GBP). Null if not mentioned.",
+                },
                 "missing_fields": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -59,6 +67,8 @@ _VOICE_TOOL_SCHEMA = {
                 "required_by_date",
                 "preferred_supplier",
                 "delivery_country",
+                "budget_amount",
+                "currency",
                 "missing_fields",
             ],
         },
@@ -106,7 +116,8 @@ IMPORTANT:
 - For countable items (e.g. laptops, lightbulbs, chairs, licenses), the unit_of_measure is obvious ("unit", "device", etc.) — you can auto-fill it or leave it null; do NOT add it to missing_fields.
 - For items measured by weight, volume, length, or time (e.g. flour, cable, consulting hours), unit_of_measure is critical. If the user did not specify it, set unit_of_measure to null and ADD "unit_of_measure" to missing_fields.
 - If quantity is not mentioned, set it to null
-- missing_fields should only include: "quantity", "required_by_date", "unit_of_measure" (when applicable). Do NOT include "budget" — budget is calculated by the system, not provided by the user."""
+- If the user mentions a budget (e.g. "budget of 5000 euros", "ten thousand", "within 2.5K CHF"), extract budget_amount as a number and currency as the 3-letter code (EUR, CHF, USD, GBP). Handle shorthand: "10K" → 10000, "2.5K" → 2500, "1M" → 1000000. If not mentioned, set both to null.
+- missing_fields should only include: "quantity", "required_by_date", "unit_of_measure" (when applicable), "budget" (if not mentioned). Do NOT add "budget" if the user already stated a budget amount."""
 
     response = await client.chat.completions.create(
         model=deployment,

@@ -310,6 +310,21 @@
       </div>
     </div>
 
+    <!-- ── Budget ────────────────────────────── -->
+    <div class="section">
+      <div class="section-title">Budget</div>
+      <div class="row">
+        <div class="col">
+          <label for="budget_amount">Budget Amount <span class="req">*</span></label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="number" id="budget_amount" min="0" step="any" placeholder="e.g. 50000" required style="flex:1;">
+            <span style="padding:10px 14px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text-dim);font-size:14px;white-space:nowrap;">EUR</span>
+          </div>
+          <span class="error-msg">Required</span>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Supplier ──────────────────────────── -->
     <div class="section">
       <div class="section-title">Supplier Preference</div>
@@ -449,6 +464,8 @@ form.addEventListener("submit", (e) => {
     category_l2:       val("category_l2"),
     quantity:          numVal("quantity"),
     unit_of_measure:   val("unit_of_measure"),
+    budget_amount:     numVal("budget_amount"),
+    currency:          "EUR",
     required_by_date:  val("required_by_date"),
     preferred_supplier: val("preferred_supplier") || null,
     delivery_address:  val("delivery_address"),
@@ -461,6 +478,13 @@ form.addEventListener("submit", (e) => {
     "unit_of_measure", "required_by_date", "delivery_address", "request_text"
   ];
 
+  // Budget is required separately (numeric field)
+  let budgetValid = true;
+  if (data.budget_amount === null || isNaN(data.budget_amount) || data.budget_amount < 0) {
+    markError("budget_amount");
+    budgetValid = false;
+  }
+
   let valid = true;
   requiredFields.forEach(id => {
     if (!data[id]) {
@@ -469,7 +493,7 @@ form.addEventListener("submit", (e) => {
     }
   });
 
-  if (!valid) {
+  if (!valid || !budgetValid) {
     outputPanel.classList.remove("visible");
     return;
   }

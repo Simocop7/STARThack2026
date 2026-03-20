@@ -36,6 +36,11 @@ export default function VoiceConversation({
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const blobUrlRef = useRef<string | null>(null);
+  // Stable refs so the TTS effect doesn't restart when callbacks change identity
+  const onPlaybackEndRef = useRef(onPlaybackEnd);
+  onPlaybackEndRef.current = onPlaybackEnd;
+  const onSpeakingStartRef = useRef(onSpeakingStart);
+  onSpeakingStartRef.current = onSpeakingStart;
 
   const i = t(language);
 
@@ -69,7 +74,7 @@ export default function VoiceConversation({
           voiceLog("tts", `fetch failed — status ${res.status}`, "falling back silently");
           if (!cancelled) {
             setPhase("idle");
-            onPlaybackEnd();
+            onPlaybackEndRef.current();
           }
           return;
         }
@@ -96,7 +101,7 @@ export default function VoiceConversation({
           if (!cancelled) {
             voiceLog("tts", "audio playback ended");
             setPhase("idle");
-            onPlaybackEnd();
+            onPlaybackEndRef.current();
           }
         };
 
@@ -105,20 +110,20 @@ export default function VoiceConversation({
             voiceLog("tts", "audio playback error");
             setError("Audio playback failed");
             setPhase("idle");
-            onPlaybackEnd();
+            onPlaybackEndRef.current();
           }
         };
 
         await audio.play();
         if (!cancelled) {
           voiceLog("tts", "audio playing");
-          onSpeakingStart?.();
+          onSpeakingStartRef.current?.();
         }
       } catch (err) {
         voiceLog("tts", "fetch threw exception", String(err));
         if (!cancelled) {
           setPhase("idle");
-          onPlaybackEnd();
+          onPlaybackEndRef.current();
         }
       }
     }
@@ -132,7 +137,8 @@ export default function VoiceConversation({
         audioRef.current = null;
       }
     };
-  }, [textToSpeak, active, language, onPlaybackEnd, onSpeakingStart]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [textToSpeak, active, language]);
 
   // Cleanup blob URL on unmount
   useEffect(() => {

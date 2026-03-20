@@ -123,6 +123,21 @@ function extractCountryCode(transcript: string): string | null {
   return null;
 }
 
+function extractBudget(transcript: string): number | null {
+  const t = transcript.toLowerCase();
+  // Match patterns like "5000 euros", "10k", "2.5K EUR", "budget of 50000", "ten thousand"
+  const shorthand = t.match(/\b(\d+(?:\.\d+)?)\s*k\b/i);
+  if (shorthand?.[1]) return parseFloat(shorthand[1]) * 1000;
+  const millions = t.match(/\b(\d+(?:\.\d+)?)\s*m\b/i);
+  if (millions?.[1]) return parseFloat(millions[1]) * 1_000_000;
+  const plain = t.match(/\b(\d{3,}(?:[.,]\d+)?)\b/);
+  if (plain?.[1]) {
+    const n = parseFloat(plain[1].replace(",", "."));
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
 function extractDate(transcript: string): string | null {
   const iso = transcript.match(/(\d{4}-\d{2}-\d{2})/);
   if (iso?.[1]) return iso[1];
@@ -145,6 +160,7 @@ function localParseVoiceTranscript(transcript: string, language: string) {
   const quantity = extractQuantity(transcript);
   const delivery_country = extractCountryCode(transcript) ?? "DE";
   const required_by_date = extractDate(transcript) ?? isoDateFromNow(7);
+  const budget_amount = extractBudget(transcript);
 
   return {
     request_text: transcript.trim(),
@@ -154,6 +170,7 @@ function localParseVoiceTranscript(transcript: string, language: string) {
     category_l2: "",
     delivery_country,
     required_by_date,
+    budget_amount,
     preferred_supplier: "",
     language,
   };
@@ -340,6 +357,8 @@ export default function RequestForm({
       onVoiceModeChange(true);
     }
 
+    // Use formRef.current.language to avoid stale closure issues (Bug 1)
+    const currentLanguage = formRef.current.language;
     let parsed: any = null;
     try {
       parsed = await fetchJsonWithRetry<any>(
@@ -349,7 +368,7 @@ export default function RequestForm({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             transcript,
-            language: form.language,
+            language: currentLanguage,
           }),
         },
         3,
@@ -357,41 +376,36 @@ export default function RequestForm({
       );
     } catch (e) {
       // Demo fallback: best-effort extraction so voice UI still works.
-      parsed = localParseVoiceTranscript(transcript, form.language);
+      parsed = localParseVoiceTranscript(transcript, currentLanguage);
     }
 
     // Merge parsed fields into form, preserving existing non-empty values.
-    // request_text: prefer the LLM-cleaned version from parse-voice (stripped of
-    // conversational filler), falling back to the raw transcript.
-    // category_l1/l2: never filled by parse-voice (the /api/validate LLM does
-    // that), so always leave them empty here — the backend will auto-detect them
-    // from request_text. Do NOT preserve a stale previous category if request_text changed.
-    let updatedForm: FormData = formRef.current;
-    setForm((prev) => {
-      const newRequestText = parsed.request_text || transcript;
-      const requestTextChanged = newRequestText !== prev.request_text;
-      const updated = {
-        ...prev,
-        request_text: newRequestText,
-        quantity: parsed.quantity ?? prev.quantity,
-        unit_of_measure: parsed.unit_of_measure || prev.unit_of_measure,
-        budget_amount: parsed.budget_amount ?? prev.budget_amount,
-        currency: parsed.currency || prev.currency,
-        required_by_date: parsed.required_by_date || prev.required_by_date,
-        preferred_supplier: parsed.preferred_supplier || prev.preferred_supplier,
-        delivery_country: parsed.delivery_country || prev.delivery_country,
-        // Clear stale categories when request text changes so the backend re-infers them
-        category_l1: requestTextChanged ? "" : prev.category_l1,
-        category_l2: requestTextChanged ? "" : prev.category_l2,
-      };
-      formRef.current = updated;
-      updatedForm = updated;
-      return updated;
-    });
+    // Build updatedForm explicitly before calling setForm (Bug 2) — this avoids
+    // depending on the side-effect inside the setState updater for stillMissing logic.
+    const currentForm = formRef.current;
+    const newRequestText = parsed.request_text || transcript;
+    const requestTextChanged = newRequestText !== currentForm.request_text;
+    const updatedForm: FormData = {
+      ...currentForm,
+      request_text: newRequestText,
+      quantity: parsed.quantity ?? currentForm.quantity,
+      unit_of_measure: parsed.unit_of_measure || currentForm.unit_of_measure,
+      budget_amount: parsed.budget_amount ?? currentForm.budget_amount,
+      currency: parsed.currency || currentForm.currency,
+      required_by_date: parsed.required_by_date || currentForm.required_by_date,
+      preferred_supplier: parsed.preferred_supplier || currentForm.preferred_supplier,
+      delivery_country: parsed.delivery_country || currentForm.delivery_country,
+      // Clear stale categories when request text changes so the backend re-infers them
+      category_l1: requestTextChanged ? "" : currentForm.category_l1,
+      category_l2: requestTextChanged ? "" : currentForm.category_l2,
+    };
+    formRef.current = updatedForm;
+    setForm(updatedForm);
 
     // Check which required fields are still missing
     const stillMissing: string[] = [];
     if (!updatedForm.quantity) stillMissing.push("quantity");
+    if (updatedForm.budget_amount === null || updatedForm.budget_amount === undefined || updatedForm.budget_amount <= 0) stillMissing.push("budget");
     if (!updatedForm.required_by_date) stillMissing.push("delivery date");
     if (!updatedForm.delivery_country) stillMissing.push("delivery_country");
 
@@ -431,7 +445,7 @@ export default function RequestForm({
     const errors = new Set<string>();
     if (!form.request_text.trim()) errors.add("request_text");
     if (form.quantity === null || form.quantity < 1) errors.add("quantity");
-    if (form.budget_amount !== null && (isNaN(form.budget_amount) || form.budget_amount < 0)) errors.add("budget_amount");
+    if (form.budget_amount === null || form.budget_amount === undefined || isNaN(form.budget_amount) || form.budget_amount < 0) errors.add("budget_amount");
     if (!form.delivery_country || !(form.delivery_country in VALID_COUNTRY_CODES)) errors.add("delivery_country");
     if (!form.required_by_date) {
       errors.add("required_by_date");
@@ -580,18 +594,18 @@ export default function RequestForm({
             </div>
           </div>
 
-          {/* Budget + currency */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {i.budgetAmount}
-              </label>
+          {/* Budget (required, EUR default) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {i.budgetAmount} <span className="text-red-600">*</span>
+            </label>
+            <div className="flex gap-2">
               <input
                 type="number"
                 min={0}
                 step="any"
                 onInvalid={(e) => e.preventDefault()}
-                className={`w-full border rounded-lg px-3 py-2 text-sm ${fieldErrors.has("budget_amount") ? "border-red-500" : "border-gray-300"}`}
+                className={`flex-1 border rounded-lg px-3 py-2 text-sm ${fieldErrors.has("budget_amount") ? "border-red-500" : "border-gray-300"}`}
                 placeholder={i.budgetPlaceholder}
                 value={form.budget_amount ?? ""}
                 onChange={(e) => {
@@ -599,26 +613,13 @@ export default function RequestForm({
                   update("budget_amount", e.target.value ? Number(e.target.value) : null);
                 }}
               />
-              {fieldErrors.has("budget_amount") && (
-                <p className="mt-1 text-xs text-red-600">Please enter a valid positive number</p>
-              )}
+              <span className="flex items-center px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm text-gray-500 select-none">
+                EUR
+              </span>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {i.currency}
-              </label>
-              <select
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
-                value={form.currency}
-                onChange={(e) => update("currency", e.target.value)}
-              >
-                <option value="EUR">EUR — Euro</option>
-                <option value="CHF">CHF — Swiss Franc</option>
-                <option value="USD">USD — US Dollar</option>
-                <option value="GBP">GBP — British Pound</option>
-                <option value="JPY">JPY — Japanese Yen</option>
-              </select>
-            </div>
+            {fieldErrors.has("budget_amount") && (
+              <p className="mt-1 text-xs text-red-600">Please enter a valid budget (positive number)</p>
+            )}
           </div>
 
           {/* Delivery country + date */}
