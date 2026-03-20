@@ -4,11 +4,12 @@ import EmployeePortal from "./components/EmployeePortal";
 import EmployeeRequestsHistory from "./components/EmployeeRequestsHistory";
 import ProcurementPortal from "./components/ProcurementPortal";
 import AppShell from "./components/AppShell";
+import InfoView from "./components/InfoView";
 import VoiceDebugPanel from "./components/VoiceDebugPanel";
 import { isVoiceDebugMode } from "./lib/voiceLogger";
 
 type Role = "employee" | "office";
-type OfficeView = "inbox" | "process" | "orders" | "policies";
+type OfficeView = "inbox" | "process" | "orders" | "policies" | "info";
 type EmployeeView = "new-request" | "history";
 
 export default function App() {
@@ -32,6 +33,7 @@ export default function App() {
       setOfficeView(view as OfficeView);
     }
     if (newRole === "employee") {
+      setOfficeView("inbox");
       setEmployeeView(view as EmployeeView);
       if (view === "new-request") setEmpKey((k) => k + 1);
     }
@@ -48,7 +50,9 @@ export default function App() {
         onNavigate={handleNavigate}
         onSwitchRole={handleSwitchRole}
       >
-        {role === "employee" ? (
+        {officeView === "info" ? (
+          <InfoView />
+        ) : role === "employee" ? (
           employeeView === "new-request" ? (
             <EmployeePortal key={empKey} onBack={() => handleSwitchRole()} />
           ) : (
@@ -58,7 +62,7 @@ export default function App() {
           <ProcurementPortal
             onBack={() => handleSwitchRole()}
             externalPhase={officeView}
-            onPhaseChange={setOfficeView}
+            onPhaseChange={(p) => setOfficeView(p)}
           />
         )}
       </AppShell>
