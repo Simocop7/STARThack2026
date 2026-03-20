@@ -405,6 +405,8 @@ export default function EmployeePortal({ onBack }: Props) {
           request_text: formData.request_text,
           quantity: enriched.quantity ?? formData.quantity ?? null,
           unit_of_measure: enriched.unit_of_measure || formData.unit_of_measure || null,
+          budget_amount: enriched.budget_amount ?? formData.budget_amount ?? null,
+          currency: enriched.currency || formData.currency || "EUR",
           category_l1: enriched.category_l1 || null,
           category_l2: enriched.category_l2 || null,
           delivery_country: enriched.delivery_country || formData.delivery_country || null,
