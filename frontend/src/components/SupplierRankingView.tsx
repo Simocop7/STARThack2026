@@ -11,6 +11,7 @@ interface Props {
   onNewRequest: () => void;
   onSelectSupplier: (supplier: ScoredSupplier) => void;
   orderContext?: FormData | null;
+  onRefuse?: () => void;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -380,7 +381,7 @@ function FeatureCard({
       }`}
     >
       {/* Card header */}
-      <div className="flex flex-col space-y-1.5 p-5 pb-3">
+      <div className="flex flex-col space-y-1.5 p-7 pb-5">
         <div className="flex justify-between items-start w-full">
           <div className="space-y-2">
             <span
@@ -395,18 +396,6 @@ function FeatureCard({
               {isFirst ? feature.label : `#${featureRank} ${feature.label}`}
             </span>
             <h3 className="text-xl font-semibold text-gray-900 leading-tight">{supplier.supplier_name}</h3>
-            <p className="text-xs text-gray-400 font-mono -mt-1">{supplier.supplier_id} · {fmtTier(supplier.pricing_tier_applied)}</p>
-            <div className="flex gap-1 flex-wrap">
-              {supplier.is_preferred && (
-                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-blue-50 text-blue-700 border-blue-200">Preferred</span>
-              )}
-              {supplier.is_incumbent && (
-                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-green-50 text-green-700 border-green-200">Incumbent</span>
-              )}
-              {!supplier.meets_lead_time && (
-                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold bg-red-50 text-red-700 border-red-200">Lead time risk</span>
-              )}
-            </div>
           </div>
           <div className="text-right shrink-0 ml-3">
             <p className={`text-2xl font-black leading-none ${scoreColor}`}>
@@ -417,31 +406,19 @@ function FeatureCard({
         </div>
       </div>
 
-      {/* Overall score bar */}
-      <div className="px-5 pb-3">
-        <div className="space-y-1.5">
-          <div className="flex justify-between text-xs text-gray-500">
-            <span>Overall score</span>
-            <span className={`font-semibold ${scoreColor}`}>{compositeScore}%</span>
-          </div>
-          <div className="relative h-2 w-full overflow-hidden rounded-full bg-gray-100">
-            <div className={`h-full rounded-full transition-all ${feature.barColor}`} style={{ width: `${compositeScore}%` }} />
-          </div>
-        </div>
-      </div>
 
       {/* Quick metrics row */}
-      <div className="px-5 pb-3">
-        <div className="grid grid-cols-3 gap-2 text-sm">
-          <div className="bg-gray-50 rounded-lg px-2.5 py-1.5">
+      <div className="px-7 pb-5">
+        <div className="grid grid-cols-3 gap-3 text-sm">
+          <div className="bg-gray-50 rounded-lg px-3 py-3">
             <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Unit price</p>
             <p className="text-sm font-bold text-gray-900">{fmt(supplier.unit_price, currency)}</p>
           </div>
-          <div className="bg-gray-50 rounded-lg px-2.5 py-1.5">
+          <div className="bg-gray-50 rounded-lg px-3 py-3">
             <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Total cost</p>
             <p className="text-sm font-bold text-gray-900">{fmt(supplier.total_price, currency)}</p>
           </div>
-          <div className="bg-gray-50 rounded-lg px-2.5 py-1.5">
+          <div className="bg-gray-50 rounded-lg px-3 py-3">
             <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Lead time</p>
             <p className="text-sm font-bold text-gray-900">
               {supplier.standard_lead_time_days}d
@@ -451,27 +428,9 @@ function FeatureCard({
         </div>
       </div>
 
-      {/* Mini score bars */}
-      <div className="px-5 pb-3 space-y-1">
-        {[
-          { label: "Price",     val: Math.round(supplier.score_breakdown.price_score * 100), color: "bg-emerald-500", display: undefined as string | undefined },
-          { label: "Quality",   val: supplier.raw_scores.quality,                            color: "bg-blue-500",    display: undefined as string | undefined },
-          { label: "Trust",     val: 100 - supplier.raw_scores.risk,                         color: "bg-amber-500",   display: undefined as string | undefined },
-          { label: "ESG",       val: supplier.raw_scores.esg,                                color: "bg-green-500",   display: undefined as string | undefined },
-          { label: "Lead Time", val: ltScore,                                                color: scoreBarColor(ltScore), display: `${supplier.standard_lead_time_days}d` },
-        ].map((item) => (
-          <div key={item.label} className="flex items-center gap-2">
-            <span className="text-[10px] text-gray-500 w-14 shrink-0">{item.label}</span>
-            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full ${item.color}`} style={{ width: `${Math.min(100, Math.max(0, item.val))}%` }} />
-            </div>
-            <span className="text-[10px] font-semibold text-gray-500 w-7 text-right">{item.display ?? item.val}</span>
-          </div>
-        ))}
-      </div>
 
       {/* Footer */}
-      <div className="flex items-center p-5 pt-0 border-t border-gray-100 mt-2">
+      <div className="flex items-center px-7 py-5 border-t border-gray-100">
         <div className="flex items-center justify-between w-full gap-3">
           <button
             onClick={() => onOpenDetail(supplier)}
@@ -661,7 +620,7 @@ function ContactPlatforms() {
 
 // ── Main component ──────────────────────────────────────────────────
 
-export default function SupplierRankingView({ result, onNewRequest, onSelectSupplier, orderContext }: Props) {
+export default function SupplierRankingView({ result, onNewRequest, onSelectSupplier, orderContext, onRefuse }: Props) {
   const [activeFeature, setActiveFeature] = useState<FeatureKey>("price");
   const [showExcluded, setShowExcluded] = useState(false);
   const [showPolicyIssues, setShowPolicyIssues] = useState(false);
@@ -802,7 +761,8 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
 
       {/* ── Order context banner ── */}
       {orderContext && (orderContext.category_l1 || orderContext.quantity) && (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex flex-wrap gap-5 items-center">
+        <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex flex-wrap gap-5 items-center justify-between">
+          <div className="flex flex-wrap gap-5 items-center">
           <div className="flex items-center gap-1.5 text-slate-500 text-xs font-semibold uppercase tracking-wide shrink-0">
             <span>📋</span> Order Context
           </div>
@@ -833,6 +793,15 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
               <p className="text-[10px] text-slate-400 uppercase tracking-wide font-medium">Required by</p>
               <p className="text-sm font-bold text-slate-800">{orderContext.required_by_date}</p>
             </div>
+          )}
+          </div>
+          {onRefuse && (
+            <button
+              onClick={onRefuse}
+              className="text-sm font-medium rounded-lg px-3 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 transition-colors shrink-0"
+            >
+              Refuse Request
+            </button>
           )}
         </div>
       )}
@@ -913,10 +882,6 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
       {/* ── Section 2: Top-10 table ── */}
       {result.ranking.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2">
-            Overall Top 10
-            <span className="text-xs font-normal text-gray-400 normal-case">— all features combined</span>
-          </h3>
           <SupplierTable
             suppliers={result.ranking}
             currency={currency}
@@ -956,25 +921,6 @@ export default function SupplierRankingView({ result, onNewRequest, onSelectSupp
         </div>
       )}
 
-      {/* ── Audit trail ── */}
-      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-          Audit Trail — Policies Checked
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {result.policies_checked.map((p) => (
-            <span key={p} className="text-xs bg-white border border-gray-200 text-gray-600 px-2 py-0.5 rounded-full">
-              {p}
-            </span>
-          ))}
-        </div>
-        {result.llm_fallback_reason && (
-          <p className="text-xs text-gray-400 mt-2 italic">AI note: {result.llm_fallback_reason}</p>
-        )}
-      </div>
-
-      {/* ── Section 3: Scoring methodology ── */}
-      <ScoringMethodology weights={result.scoring_weights} />
 
       {/* ── Footer: contact platforms ── */}
       <ContactPlatforms />

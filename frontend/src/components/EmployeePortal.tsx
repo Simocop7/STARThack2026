@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AppLoader } from "./ui/app-loader";
 import CategoryDisambiguation from "./CategoryDisambiguation";
 import EmployeeReviewStep from "./EmployeeReviewStep";
 import RequestForm from "./RequestForm";
@@ -524,12 +525,17 @@ export default function EmployeePortal({ onBack }: Props) {
 
         {/* Loading */}
         {(loading || submitLoading) && (
-          <div className="flex flex-col items-center gap-4 py-16">
-            <div className="w-10 h-10 border-4 border-red-200 border-t-red-600 rounded-full animate-spin" />
-            <p className="text-gray-600">
-              {submitLoading ? "Submitting your request..." : i.analyzing}
-            </p>
-          </div>
+          <AppLoader
+            title={submitLoading ? "Submitting your request" : i.analyzing}
+            sentences={submitLoading ? undefined : [
+              "Parsing your request…",
+              "Detecting language and intent…",
+              "Extracting key details…",
+              "Checking category and quantities…",
+              "Cross-referencing supplier data…",
+              "Almost ready…",
+            ]}
+          />
         )}
 
         {/* Phase: Submitted */}

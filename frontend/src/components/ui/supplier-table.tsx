@@ -129,8 +129,9 @@ export function SupplierTable({
     <div className={`w-full ${className}`}>
       {/* Toolbar */}
       <div className="mb-3 flex items-center justify-between gap-2 flex-wrap">
-        <span className="text-xs text-gray-500 font-medium">
-          Overall top {top10.length} — all features combined
+        <span className="text-sm font-bold text-gray-800 uppercase tracking-wider">
+          Overall top {top10.length}
+          <span className="text-xs font-normal text-gray-400 normal-case ml-1">— all features combined</span>
         </span>
         <div className="flex items-center gap-2">
           {/* Sort */}

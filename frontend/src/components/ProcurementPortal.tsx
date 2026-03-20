@@ -98,7 +98,9 @@ export default function ProcurementPortal({ onBack, externalPhase, onPhaseChange
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalPhase]);
 
-  useEffect(() => { onPhaseChange?.(officePhase); }, [officePhase, onPhaseChange]);
+  const onPhaseChangeRef = useRef(onPhaseChange);
+  onPhaseChangeRef.current = onPhaseChange;
+  useEffect(() => { onPhaseChangeRef.current?.(officePhase); }, [officePhase]);
 
   useEffect(() => {
     refreshOrders();
@@ -406,41 +408,6 @@ export default function ProcurementPortal({ onBack, externalPhase, onPhaseChange
         {/* ── Processing view ── */}
         {officePhase === "process" && (
           <>
-            <div className="mb-6 flex items-center justify-between">
-              <div className="flex items-center gap-6">
-                <div>
-                  <h2 className="app-title-secondary">Current Request</h2>
-                  <p className="text-sm text-gray-500 mt-0.5">
-                    {activeEmpRequestId
-                      ? `Reviewing ${activeEmpRequestId}`
-                      : "Review and complete the request currently in progress."}
-                  </p>
-                </div>
-                {activeEmpRequestId && !orderConfirmation && (
-                  <button
-                    onClick={handleRefuseDuringProcessing}
-                    className="text-sm font-medium rounded-lg px-3 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
-                  >
-                    Refuse Request
-                  </button>
-                )}
-              </div>
-              <button
-                onClick={() => {
-                  setOfficePhase("inbox");
-                  setError(null);
-                  setVoiceMode(false);
-                  setTtsText(null);
-                  setConversationPhase("idle");
-                }}
-                className="text-sm text-red-600 hover:text-red-800 font-medium flex items-center gap-1"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-                Back to Inbox
-              </button>
-            </div>
             <VoiceConversation
               textToSpeak={ttsText}
               language={language}
@@ -490,6 +457,7 @@ export default function ProcurementPortal({ onBack, externalPhase, onPhaseChange
                 onNewRequest={handleNewRequest}
                 onSelectSupplier={handleSelectSupplier}
                 orderContext={formData}
+                onRefuse={activeEmpRequestId && !orderConfirmation ? handleRefuseDuringProcessing : undefined}
               />
             )}
 

@@ -28,7 +28,7 @@ export default function HeroPage({ onEnter }: HeroPageProps) {
             whileTap={{ scale: 0.98 }}
             className="hero-enter-btn"
           >
-            <span className="relative z-10 uppercase tracking-widest text-sm font-black">Enter</span>
+            <span className="relative z-10 uppercase tracking-widest text-sm font-black">Join SilvioIQ</span>
             <span className="hero-arrow-icon relative z-10">
               <svg
                 width="22"

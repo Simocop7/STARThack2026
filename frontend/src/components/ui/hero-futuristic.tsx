@@ -78,7 +78,6 @@ const PostProcessing = ({
   useFrame(({ clock }) => {
     // Animate the scan line from top to bottom
     progressRef.current.value = (Math.sin(clock.getElapsedTime() * 0.5) * 0.5 + 0.5);
-    // `renderAsync` is deprecated in newer OGL/THREE versions.
     // Use best-available render method for smoother animation.
     const anyRender = render as any;
     if (typeof anyRender.render === "function") {
@@ -101,7 +100,7 @@ const Scene = () => {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    // Показываем изображение после загрузки текстур
+
     if (rawMap && depthMap) {
       setVisible(true);
     }
@@ -159,7 +158,7 @@ const Scene = () => {
 
   useFrame(({ clock }) => {
     uniforms.uProgress.value = (Math.sin(clock.getElapsedTime() * 0.5) * 0.5 + 0.5);
-    // Плавное появление
+
     if (meshRef.current && 'material' in meshRef.current && (meshRef.current as any).material) {
       const mat = (meshRef.current as any).material as any;
       if ('opacity' in mat) {
@@ -185,7 +184,7 @@ const Scene = () => {
 };
 
 export const Html = () => {
-  const titleWords = 'Build Your Dreams'.split(' ');
+  const titleWords = 'Empower Procurement'.split(' ');
   const subtitle = 'AI-powered creativity for the next generation.';
   const [visibleWords, setVisibleWords] = useState(0);
   const [subtitleVisible, setSubtitleVisible] = useState(false);
@@ -216,7 +215,7 @@ export const Html = () => {
             {titleWords.map((word, index) => (
               <div
                 key={index}
-                className={index < visibleWords ? 'fade-in' : ''}
+                className={index < visibleWords ? 'hero-word-white' : ''}
                 style={{
                   animationDelay: `${index * 0.13 + (delays[index] || 0)}s`,
                   opacity: index < visibleWords ? undefined : 0,
@@ -229,7 +228,7 @@ export const Html = () => {
         </div>
         <div className="text-xs md:text-xl xl:text-2xl 2xl:text-3xl mt-2 overflow-hidden text-white font-bold">
           <div
-            className={subtitleVisible ? 'fade-in-subtitle' : ''}
+            className={subtitleVisible ? 'hero-subtitle-glow' : ''}
             style={{
               animationDelay: `${titleWords.length * 0.13 + 0.2 + subtitleDelay}s`,
               opacity: subtitleVisible ? undefined : 0,

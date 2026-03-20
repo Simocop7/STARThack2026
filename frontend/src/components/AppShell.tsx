@@ -3,11 +3,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   PlusCircle, History, Inbox, PenLine,
   FileText, Settings, CircleUserRound, ClipboardList,
-  ChevronDown, Menu, X, LogOut, Building2,
+  ChevronDown, Menu, X, LogOut, Building2, Info,
 } from "lucide-react";
 
 type Role = "employee" | "office";
-type OfficeView = "inbox" | "process" | "orders" | "policies";
+type OfficeView = "inbox" | "process" | "orders" | "policies" | "info";
 type EmployeeView = "new-request" | "history";
 
 interface AppShellProps {
@@ -160,6 +160,12 @@ function SidebarContent({
         onClick: () => onNavigate("office", "policies"),
       },
       {
+        icon: <Info className="w-4 h-4" />,
+        label: "Info",
+        active: officeView === "info",
+        onClick: () => onNavigate("office", "info"),
+      },
+      {
         icon: <Settings className="w-4 h-4" />,
         label: "Settings",
         disabled: true,
@@ -199,9 +205,9 @@ function SidebarContent({
             <CircleUserRound className="w-4 h-4 text-white/60" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-white leading-none truncate">Alex Morgan</p>
+            <p className="text-sm font-semibold text-white leading-none truncate">Silvio</p>
             <p className="text-[11px] text-white/40 mt-0.5 leading-none truncate">
-              alex.morgan@chainiq.com
+              silvio@silvioiq.com
             </p>
           </div>
           <button

@@ -471,7 +471,7 @@ export default function RequestForm({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12 w-full">
+      <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12 lg:items-stretch w-full">
         <div className="lg:col-span-7 space-y-6">
           {/* Language selector */}
           <div className="flex items-center gap-3">
@@ -691,14 +691,14 @@ export default function RequestForm({
           </div>
         </div>
 
-        <div className={`lg:col-span-5 space-y-6 ${showDemoSelector ? "lg:pt-14" : ""}`}>
-          <div className="rounded-2xl border border-gray-200 bg-white p-5">
+        <div className={`lg:col-span-5 flex flex-col gap-6 ${showDemoSelector ? "lg:pt-14" : ""}`}>
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 flex-1 flex flex-col">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               {i.requestDescription}
             </label>
             <textarea
               rows={5}
-              className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 ${fieldErrors.has("request_text") ? "border-red-500" : "border-gray-300"}`}
+              className={`w-full flex-1 resize-none border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 ${fieldErrors.has("request_text") ? "border-red-500" : "border-gray-300"}`}
               placeholder={i.requestPlaceholder}
               value={form.request_text}
               onChange={(e) => { clearFieldError("request_text"); update("request_text", e.target.value); }}
@@ -778,13 +778,15 @@ export default function RequestForm({
         </div>
       </div>
 
-      <ShimmerButton
-        type="submit"
-        background="rgb(185 28 28)"
-        className="w-full rounded-lg px-4 py-3 font-medium hover:opacity-95"
-      >
-        {submitLabel ?? i.validateRequest}
-      </ShimmerButton>
+      <div className="flex justify-center">
+        <ShimmerButton
+          type="submit"
+          background="rgb(185 28 28)"
+          className="w-1/2 rounded-lg px-4 py-3 font-medium hover:opacity-95"
+        >
+          {submitLabel ?? i.validateRequest}
+        </ShimmerButton>
+      </div>
     </form>
   );
 }

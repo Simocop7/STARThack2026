@@ -113,31 +113,31 @@ export default function EmployeeRequestsHistory() {
   }, [history]);
 
   return (
-    <div className="min-h-full py-8 px-6">
+    <div className="bg-white min-h-full py-8 px-6">
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-semibold text-white">Requests History</h2>
-          <p className="text-sm text-white/60 mt-1">
+          <h2 className="app-title-secondary">Requests History</h2>
+          <p className="text-sm text-gray-500 mt-1">
             Your submitted requests, latest first.
           </p>
         </div>
       </div>
 
       {loading && (
-        <div className="flex items-center gap-3 text-white/70">
+        <div className="flex items-center gap-3 text-gray-500">
           <div className="w-8 h-8 border-4 border-red-200 border-t-red-600 rounded-full animate-spin" />
           Loading history...
         </div>
       )}
 
       {!loading && error && (
-        <div className="bg-red-950/40 border border-red-200/20 rounded-lg p-4 text-red-100">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
           <p className="text-sm">{error}</p>
         </div>
       )}
 
       {!loading && !error && tasks.length === 0 && (
-        <div className="w-full rounded-lg border border-white/10 bg-black/20 p-8 text-white/70 text-center">
+        <div className="w-full rounded-lg border border-gray-200 bg-gray-50 p-8 text-gray-500 text-center">
           No requests found.
         </div>
       )}

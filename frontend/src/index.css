@@ -160,6 +160,62 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Luma spinner ──────────────────────────────────────────── */
+@keyframes lumaAnim {
+  0%    { inset: 0 35px 35px 0; }
+  12.5% { inset: 0 35px 0    0; }
+  25%   { inset: 35px 35px 0 0; }
+  37.5% { inset: 35px 0    0 0; }
+  50%   { inset: 35px 0    0 35px; }
+  62.5% { inset: 0    0    0 35px; }
+  75%   { inset: 0    0    35px 35px; }
+  87.5% { inset: 0    0    35px 0; }
+  100%  { inset: 0 35px 35px 0; }
+}
+.luma-span {
+  position: absolute;
+  border-radius: 50px;
+  animation: lumaAnim 2.5s infinite;
+  box-shadow: inset 0 0 0 3px #991b1b;
+}
+.luma-span-delay { animation-delay: -1.25s; }
+
+/* ── Hero title glitch + gradient ──────────────────────────── */
+
+@keyframes glitch {
+  0%, 80%, 100% {
+    transform: translate(0) skewX(0deg);
+    opacity: 1;
+  }
+  81%  { transform: translate(-5px,  1px) skewX(-5deg); opacity: 0.85; }
+  83%  { transform: translate( 5px, -1px) skewX( 5deg); opacity: 0.80; }
+  85%  { transform: translate(-3px,  0px) skewX(-2deg); opacity: 0.88; }
+  87%  { transform: translate( 3px,  1px) skewX( 2deg); opacity: 0.92; }
+  89%  { transform: translate(-1px, -1px) skewX(-1deg); opacity: 0.96; }
+  91%  { transform: translate(0) skewX(0deg);           opacity: 1;    }
+}
+
+@keyframes title-glow {
+  0%, 70%, 100% { text-shadow: none; }
+  75%  { text-shadow: 0 0 18px rgba(255,255,255,0.95), 0 0 40px rgba(255,255,255,0.55), 0 0 80px rgba(255,255,255,0.25); }
+  85%  { text-shadow: 0 0 8px  rgba(255,255,255,0.4); }
+}
+
+/* Applied once each title word becomes visible */
+.hero-word-white {
+  display: inline-block;
+  animation:
+    heroFadeIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards,
+    glitch 5s 2s infinite;
+}
+
+.hero-subtitle-glow {
+  animation:
+    heroFadeIn 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards,
+    title-glow 5s 3s infinite;
+}
+
+
 /* ── Hero page ─────────────────────────────────────────────── */
 
 @keyframes heroFadeIn {
