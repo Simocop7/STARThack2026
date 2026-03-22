@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Silvio IQ — Crimson Pulse</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --red-hot:   #f43f5e;
+    --red-core:  #ef4444;
+    --red-mid:   #dc2626;
+    --red-deep:  #991b1b;
+    --red-glass: rgba(220,38,38,0.12);
+    --void:      #0a0a0a;
+    --void-mid:  #111111;
+    --white:     rgba(255,255,255,0.92);
+    --dim:       rgba(255,255,255,0.45);
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+  }
+
+  /* ─── SLIDE ENGINE ─────────────────────────────────────────────── */
+  .deck {
+    width: 100vw; height: 100vh;
+    position: relative;
+  }
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.8s cubic-bezier(.4,0,.2,1);
+  }
+  .slide.active {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  /* ─── NAV ──────────────────────────────────────────────────────── */
+  .nav {
+    position: fixed; bottom: 2.4rem; left: 50%;
+    transform: translateX(-50%);
+    display: flex; align-items: center; gap: 1.2rem;
+    z-index: 100;
+  }
+  .nav-btn {
+    background: rgba(239,68,68,0.08);
+    border: 1px solid rgba(239,68,68,0.35);
+    color: var(--red-core);
+    width: 2.6rem; height: 2.6rem;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.1rem;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.25s;
+    backdrop-filter: blur(8px);
+  }
+  .nav-btn:hover {
+    background: rgba(239,68,68,0.22);
+    box-shadow: 0 0 18px rgba(239,68,68,0.5);
+  }
+  .nav-dots {
+    display: flex; gap: 0.5rem;
+  }
+  .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .dot.active {
+    background: var(--red-core);
+    box-shadow: 0 0 8px var(--red-core);
+    width: 18px; border-radius: 3px;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     SLIDE 1 — Pure Void
+  ═══════════════════════════════════════════════════════════════ */
+  #s1 {
+    background: #0a0a0a;
+  }
+  #s1::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
+    background-size: 300px 300px;
+    opacity: 0.55;
+  }
+  #s1::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 60% 60% at 50% 50%, rgba(18,18,18,0) 0%, #0a0a0a 100%);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     SLIDE 2 — 1.5B WASTED sphere
+  ═══════════════════════════════════════════════════════════════ */
+  #s2 {
+    background: radial-gradient(ellipse 55% 55% at 50% 50%, rgba(120,0,0,0.18) 0%, #0a0a0a 70%);
+  }
+  .sphere-wrap {
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sphere {
+    width: min(55vw, 55vh);
+    height: min(55vw, 55vh);
+    border-radius: 50%;
+    background:
+      radial-gradient(ellipse 45% 35% at 60% 35%, rgba(255,255,255,0.04) 0%, transparent 60%),
+      radial-gradient(ellipse 80% 80% at 50% 50%, rgba(153,27,27,0.65) 0%, rgba(30,5,5,0.92) 55%, #0a0a0a 100%);
+    box-shadow:
+      0 0 60px rgba(153,27,27,0.45),
+      0 0 120px rgba(120,20,20,0.3),
+      0 0 220px rgba(80,10,10,0.2),
+      inset 0 0 80px rgba(0,0,0,0.8);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+  .sphere::before {
+    content: '';
+    position: absolute; inset: 0; border-radius: 50%;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='5' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23n)' opacity='0.12'/%3E%3C/svg%3E");
+    opacity: 0.6;
+  }
+  .sphere-text {
+    position: relative; z-index: 2;
+    text-align: center;
+    line-height: 1;
+  }
+  .sphere-text .billion {
+    font-size: clamp(3.5rem, 10vw, 8rem);
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -0.02em;
+    text-shadow:
+      0 0 20px rgba(254,202,202,0.9),
+      0 0 40px rgba(239,68,68,0.8),
+      0 0 80px rgba(239,68,68,0.5),
+      0 0 140px rgba(153,27,27,0.4);
+    font-variant-numeric: tabular-nums;
+    filter: url(#distress);
+  }
+  .sphere-text .wasted {
+    display: block;
+    font-size: clamp(2rem, 6vw, 4.8rem);
+    font-weight: 900;
+    color: rgba(254,202,202,0.82);
+    letter-spacing: 0.18em;
+    text-shadow:
+      0 0 15px rgba(254,202,202,0.6),
+      0 0 35px rgba(239,68,68,0.6),
+      0 0 70px rgba(153,27,27,0.4);
+    margin-top: 0.15em;
+    filter: url(#distress2);
+  }
+  /* Hidden SVG for distress filter */
+  .filters { position: absolute; width: 0; height: 0; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     SLIDE 3 — We are Silvio
+  ═══════════════════════════════════════════════════════════════ */
+  #s3 {
+    background: #0a0a0a;
+    flex-direction: column;
+    gap: 0;
+  }
+  #s3::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+    background-size: 300px 300px;
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  .s3-inner {
+    position: relative; z-index: 2;
+    text-align: center;
+  }
+  .s3-line1 {
+    font-size: clamp(2.4rem, 6vw, 5rem);
+    font-weight: 800;
+    color: var(--white);
+    letter-spacing: -0.01em;
+    display: block;
+  }
+  .s3-line2 {
+    font-size: clamp(1rem, 2.6vw, 2rem);
+    font-weight: 400;
+    color: rgba(255,255,255,0.78);
+    letter-spacing: 0.04em;
+    display: block;
+    margin-top: 1.2rem;
+    animation: fadeInOut 3.2s ease-in-out infinite;
+  }
+  @keyframes fadeInOut {
+    0%   { opacity: 0.08; filter: blur(3px); }
+    30%  { opacity: 0.95; filter: blur(0); }
+    70%  { opacity: 0.95; filter: blur(0); }
+    100% { opacity: 0.08; filter: blur(3px); }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     SLIDE 4 — Flowchart
+  ═══════════════════════════════════════════════════════════════ */
+  #s4 {
+    background: #0a0a0a;
+    position: relative;
+  }
+  #s4::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+    background-size: 300px 300px;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     SLIDE 5 — The Process
+  ═══════════════════════════════════════════════════════════════ */
+  #s5 {
+    background: radial-gradient(ellipse 70% 70% at 50% 50%, rgba(60,5,5,0.25) 0%, #0a0a0a 75%);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4vh 6vw;
+  }
+  .s4-title {
+    font-size: clamp(0.65rem, 1.3vw, 1rem);
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--red-core);
+    margin-bottom: 3vh;
+    text-shadow: 0 0 18px rgba(239,68,68,0.6);
+    position: relative; z-index:2;
+  }
+  .process-track {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    width: 100%;
+    max-width: 1100px;
+    position: relative; z-index: 2;
+  }
+  .process-step {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+  .step-card {
+    background: rgba(220,38,38,0.08);
+    border: 1px solid rgba(239,68,68,0.28);
+    border-radius: 14px;
+    padding: clamp(1rem,2vw,1.6rem) clamp(0.7rem,1.5vw,1.2rem);
+    text-align: center;
+    width: 100%;
+    backdrop-filter: blur(12px);
+    box-shadow:
+      0 0 18px rgba(239,68,68,0.08),
+      inset 0 1px 0 rgba(255,255,255,0.05);
+    transition: box-shadow 0.3s;
+    height: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    gap: 0.7rem;
+  }
+  .step-card:hover {
+    box-shadow:
+      0 0 30px rgba(239,68,68,0.22),
+      0 0 60px rgba(239,68,68,0.1),
+      inset 0 1px 0 rgba(255,255,255,0.08);
+  }
+  .step-icon {
+    font-size: clamp(1.4rem, 2.5vw, 2rem);
+    line-height: 1;
+    filter: drop-shadow(0 0 8px rgba(239,68,68,0.7));
+  }
+  .step-num {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--red-core);
+    opacity: 0.7;
+  }
+  .step-title {
+    font-size: clamp(0.7rem, 1.3vw, 0.95rem);
+    font-weight: 700;
+    color: var(--white);
+    line-height: 1.25;
+  }
+  .step-desc {
+    font-size: clamp(0.55rem, 0.95vw, 0.75rem);
+    color: var(--dim);
+    line-height: 1.55;
+  }
+  .process-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: clamp(1.2rem, 2.5vw, 2.5rem);
+    flex-shrink: 0;
+    color: var(--red-mid);
+    font-size: clamp(0.8rem, 1.5vw, 1.2rem);
+    filter: drop-shadow(0 0 6px rgba(239,68,68,0.5));
+    padding-top: 0;
+    align-self: center;
+  }
+  .s4-sub {
+    margin-top: 3vh;
+    font-size: clamp(0.6rem, 1.1vw, 0.8rem);
+    color: rgba(255,255,255,0.3);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-align: center;
+    position: relative; z-index:2;
+  }
+
+  .flowchart-svg {
+    width: min(95vw, 95vh * 1.5);
+    height: auto;
+    position: relative; z-index: 2;
+    max-height: 90vh;
+  }
+
+  /* shared glassmorphic glow label */
+  .tag {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+
+<!-- Distress SVG filters -->
+<svg class="filters" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="distress" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="turbulence" baseFrequency="0.03 0.07" numOctaves="2" seed="2" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="4" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="distress2" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="turbulence" baseFrequency="0.04 0.09" numOctaves="3" seed="7" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="5" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+</svg>
+
+<div class="deck">
+
+  <!-- ══════════ SLIDE 1 ══════════ -->
+  <div class="slide active" id="s1"></div>
+
+  <!-- ══════════ SLIDE 2 ══════════ -->
+  <div class="slide" id="s2">
+    <div class="sphere-wrap">
+      <div class="sphere">
+        <div class="sphere-text">
+          <span class="billion">1.5B</span>
+          <span class="wasted">WASTED</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ SLIDE 3 ══════════ -->
+  <div class="slide" id="s3">
+    <div class="s3-inner">
+      <span class="s3-line1">We are Silvio</span>
+      <span class="s3-line2">We want to kill inefficiencies in procurement</span>
+    </div>
+  </div>
+
+  <!-- ══════════ SLIDE 4 — Flowchart ══════════ -->
+  <div class="slide" id="s4">
+    <svg class="flowchart-svg" viewBox="0 0 900 540" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="rgba(255,255,255,0.75)"/>
+        </marker>
+        <filter id="glow-white">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="glow-red">
+          <feGaussianBlur stdDeviation="5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- Left ovals -->
+      <ellipse cx="155" cy="175" rx="90" ry="40" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" fill="rgba(255,255,255,0.03)" filter="url(#glow-white)"/>
+      <text x="155" y="181" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-family="Inter,sans-serif" font-size="15" font-weight="600">Finance</text>
+
+      <ellipse cx="155" cy="270" rx="90" ry="40" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" fill="rgba(255,255,255,0.03)" filter="url(#glow-white)"/>
+      <text x="155" y="276" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-family="Inter,sans-serif" font-size="15" font-weight="600">Operations</text>
+
+      <ellipse cx="155" cy="365" rx="90" ry="40" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" fill="rgba(255,255,255,0.03)" filter="url(#glow-white)"/>
+      <text x="155" y="371" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-family="Inter,sans-serif" font-size="15" font-weight="600">Sales</text>
+
+      <!-- Central box -->
+      <rect x="335" y="165" width="230" height="210" rx="14" stroke="rgba(239,68,68,0.8)" stroke-width="2" fill="rgba(220,38,38,0.10)" filter="url(#glow-red)"/>
+      <rect x="343" y="173" width="214" height="194" rx="10" stroke="rgba(239,68,68,0.2)" stroke-width="1" fill="none"/>
+      <text x="450" y="275" text-anchor="middle" fill="rgba(255,255,255,0.95)" font-family="Inter,sans-serif" font-size="26" font-weight="800" letter-spacing="-0.5">Silvio IQ</text>
+      <text x="450" y="297" text-anchor="middle" fill="rgba(239,68,68,0.6)" font-family="Inter,sans-serif" font-size="9" font-weight="700" letter-spacing="3">PROCUREMENT AI</text>
+
+      <!-- Top: Procurement Officer -->
+      <circle cx="450" cy="68" r="16" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" fill="rgba(255,255,255,0.04)"/>
+      <path d="M424 112 Q424 94 450 94 Q476 94 476 112" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" fill="none"/>
+      <text x="450" y="130" text-anchor="middle" fill="rgba(255,255,255,0.55)" font-family="Inter,sans-serif" font-size="8.5" font-weight="700" letter-spacing="2.5">PROCUREMENT OFFICER</text>
+      <path d="M450 133 Q450 150 450 163" stroke="rgba(255,255,255,0.35)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+
+      <!-- Right ovals -->
+      <ellipse cx="748" cy="220" rx="102" ry="44" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" fill="rgba(255,255,255,0.03)" filter="url(#glow-white)"/>
+      <text x="748" y="216" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-family="Inter,sans-serif" font-size="13" font-weight="600">Onboarded</text>
+      <text x="748" y="233" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-family="Inter,sans-serif" font-size="13" font-weight="600">suppliers</text>
+
+      <ellipse cx="748" cy="320" rx="102" ry="44" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" fill="rgba(255,255,255,0.03)" filter="url(#glow-white)"/>
+      <text x="748" y="316" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-family="Inter,sans-serif" font-size="13" font-weight="600">Scouted</text>
+      <text x="748" y="333" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-family="Inter,sans-serif" font-size="13" font-weight="600">suppliers</text>
+
+      <!-- Arrows Left → Center with RDA labels -->
+      <path d="M245 175 C290 175 300 210 335 230" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+      <text x="280" y="165" fill="rgba(239,68,68,0.9)" font-family="Inter,sans-serif" font-size="10" font-weight="700" letter-spacing="1">RDA</text>
+
+      <path d="M245 270 C290 270 315 270 335 270" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+      <text x="272" y="258" fill="rgba(239,68,68,0.9)" font-family="Inter,sans-serif" font-size="10" font-weight="700" letter-spacing="1">RDA</text>
+
+      <path d="M245 365 C290 365 300 330 335 310" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+      <text x="272" y="382" fill="rgba(239,68,68,0.9)" font-family="Inter,sans-serif" font-size="10" font-weight="700" letter-spacing="1">RDA</text>
+
+      <!-- Arrows Center → Right -->
+      <path d="M565 240 C610 240 630 225 645 220" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+      <path d="M565 300 C610 300 630 315 645 320" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+    </svg>
+  </div>
+
+  <!-- ══════════ SLIDE 5 — Process ══════════ -->
+  <div class="slide" id="s5">
+    <div class="s4-title">How Silvio IQ Works</div>
+    <div class="process-track">
+
+      <div class="process-step">
+        <div class="step-card">
+          <div class="step-num">01</div>
+          <div class="step-icon">📋</div>
+          <div class="step-title">RDA Submitted</div>
+          <div class="step-desc">Finance, Operations or Sales raises a Request for Approval with full requirement specs.</div>
+        </div>
+      </div>
+
+      <div class="process-arrow">▶</div>
+
+      <div class="process-step">
+        <div class="step-card">
+          <div class="step-num">02</div>
+          <div class="step-icon">🧠</div>
+          <div class="step-title">AI Parses Intent</div>
+          <div class="step-desc">Silvio IQ extracts structured requirements — categories, quantities, compliance constraints, timelines.</div>
+        </div>
+      </div>
+
+      <div class="process-arrow">▶</div>
+
+      <div class="process-step">
+        <div class="step-card">
+          <div class="step-num">03</div>
+          <div class="step-icon">🔍</div>
+          <div class="step-title">Market Intelligence</div>
+          <div class="step-desc">Live scanning of supplier databases, pricing benchmarks, and risk signals across the supply chain.</div>
+        </div>
+      </div>
+
+      <div class="process-arrow">▶</div>
+
+      <div class="process-step">
+        <div class="step-card">
+          <div class="step-num">04</div>
+          <div class="step-icon">⚖️</div>
+          <div class="step-title">Score &amp; Rank</div>
+          <div class="step-desc">Suppliers scored on price, quality, delivery, ESG, and strategic fit. Best match surfaces instantly.</div>
+        </div>
+      </div>
+
+      <div class="process-arrow">▶</div>
+
+      <div class="process-step">
+        <div class="step-card">
+          <div class="step-num">05</div>
+          <div class="step-icon">✅</div>
+          <div class="step-title">Decision Output</div>
+          <div class="step-desc">Procurement Officer receives a ranked shortlist — onboard existing or scout new suppliers — with full audit trail.</div>
+        </div>
+      </div>
+
+    </div>
+    <div class="s4-sub">Powered by Silvio IQ · Procurement Intelligence Layer</div>
+  </div>
+
+</div><!-- /deck -->
+
+<!-- Navigation -->
+<nav class="nav">
+  <button class="nav-btn" id="prev">‹</button>
+  <div class="nav-dots" id="dots"></div>
+  <button class="nav-btn" id="next">›</button>
+</nav>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const dotsEl = document.getElementById('dots');
+  let cur = 0;
+
+  // Build dots
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.onclick = () => go(i);
+    dotsEl.appendChild(d);
+  });
+
+  function go(n) {
+    slides[cur].classList.remove('active');
+    dotsEl.children[cur].classList.remove('active');
+    cur = (n + slides.length) % slides.length;
+    slides[cur].classList.add('active');
+    dotsEl.children[cur].classList.add('active');
+  }
+
+  document.getElementById('prev').onclick = () => go(cur - 1);
+  document.getElementById('next').onclick = () => go(cur + 1);
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') go(cur + 1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp') go(cur - 1);
+  });
+</script>
+</body>
+</html>
