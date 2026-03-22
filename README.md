@@ -156,18 +156,29 @@ Vite proxies `/api` to `http://localhost:8000` in development (`frontend/vite.co
 - `POST /api/policies/upload`
 - `POST /api/policies/extract`
 
+### Data / catalog
+
+- `GET /api/categories`
+- `GET /api/suppliers/search`
+- `GET /api/requests`
+- `GET /api/requests/{request_id}`
+
 ---
 
 ## Project structure (high level)
 
 ```text
 api/                      FastAPI app, ranking + validation orchestration
-backend/                  Python dependency list
+backend/                  Python dependency list (requirements.txt)
 frontend/                 React + TypeScript + Tailwind UI
   src/components/         Portal views and workflows
   src/components/ui/      Reusable UI primitives/components
+  e2e/                    Playwright end-to-end tests
+tests/                    Python unit + integration tests
 ChainIQ-START-Hack-2026-/data/
                           Challenge datasets (requests/suppliers/pricing/policies/history)
+Dockerfile                Container build (serves frontend + backend)
+railway.toml              Railway deployment config
 start.sh                  One-command local startup
 ```
 
